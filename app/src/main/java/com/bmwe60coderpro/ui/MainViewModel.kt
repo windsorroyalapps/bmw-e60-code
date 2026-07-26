@@ -225,7 +225,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 transport = buildTransport(_state.value.profile)
                 val currentTransport = transport
                 if (currentTransport == null) {
-                    _state.value = _state.value.copy(statusMessage = "Transport init failed")
+                    _state.value = _state.value.copy(dashboardStatus = "Transport init failed")
                     return@launch
                 }
                 val newSession = KdcanSession(currentTransport, currentTarget(), _state.value.profile.vehicleProfile)
@@ -1122,6 +1122,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
             }
     }
 }
+
 
 
 
