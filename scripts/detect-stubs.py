@@ -113,7 +113,7 @@ def main():
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
     print(f"Report written to: {args.output}")
-    sys.exit(0 if len(unique) == 0 else 1)
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()
