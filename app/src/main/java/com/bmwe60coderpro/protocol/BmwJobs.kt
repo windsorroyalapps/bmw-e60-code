@@ -359,7 +359,7 @@ object BmwJobs {
             ),
             description = "E60-oriented FRM / LM workflow.",
             supportedTargets = setOf(BmwTargets.FRM.name),
-    ) + listOf(
+        ),
         BmwJob(
             id = "e60_acsm_probe_pack",
             label = "E60 ACSM probe pack",
