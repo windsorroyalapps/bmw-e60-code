@@ -9,22 +9,22 @@ package com.bmwe60coderpro.protocol
  * button_matrix_2 (body[3]) changes from the legacy E-series pattern.
  *
  * F-series button_matrix_1 (byte offset 2 of 0x02 response body):
- *   bit 0  – Volume UP
- *   bit 1  – Volume DOWN
- *   bit 2  – Next track / seek forward
- *   bit 3  – Previous track / seek backward
- *   bit 4  – Voice / Dictation
- *   bit 5  – Telephone answer
- *   bit 6  – Telephone end / reject
- *   bit 7  – MODE / source toggle
+ * bit 0 – Volume UP
+ * bit 1 – Volume DOWN
+ * bit 2 – Next track / seek forward
+ * bit 3 – Previous track / seek backward
+ * bit 4 – Voice / Dictation
+ * bit 5 – Telephone answer
+ * bit 6 – Telephone end / reject
+ * bit 7 – MODE / source toggle
  *
  * F-series button_matrix_2 (byte offset 3 of 0x02 response body):
- *   bit 0  – Paddle RIGHT (upshift)
- *   bit 1  – Paddle LEFT (downshift)
- *   bit 2  – Sport / Drive mode
- *   bit 3  – Heated wheel toggle (if equipped)
- *   bit 4  – OK / select (iDrive shortcut)
- *   bit 5..7 – reserved / not mapped on all variants
+ * bit 0 – Paddle RIGHT (upshift)
+ * bit 1 – Paddle LEFT (downshift)
+ * bit 2 – Sport / Drive mode
+ * bit 3 – Heated wheel toggle (if equipped)
+ * bit 4 – OK / select (iDrive shortcut)
+ * bit 5..7 – reserved / not mapped on all variants
  *
  * These are community-derived bit positions based on reverse-engineered SZL traces from
  * F10/F30 wheels fitted to E60/E61 platforms. Validate on your specific wheel variant before
@@ -45,11 +45,11 @@ data class SzlButtonFrame(
 data class MflEvent(
     val label: String,
     /** KWP output-control payload bytes to write to KOMBI (0x80) for this event.
-     *  Service 0x30 = inputOutputControlByLocalIdentifier.
-     *  Local ID 0xA0 = MFL button input block (community-verified for E60 KOMBI).
-     *  byte[0] = 0xA0 (local ID)
-     *  byte[1] = control option (0x03 = freeze / short activation pulse)
-     *  byte[2] = MFL button code (see MflButtonCode) */
+     * Service 0x30 = inputOutputControlByLocalIdentifier.
+     * Local ID 0xA0 = MFL button input block (community-verified for E60 KOMBI).
+     * byte[0] = 0xA0 (local ID)
+     * byte[1] = control option (0x03 = freeze / short activation pulse)
+     * byte[2] = MFL button code (see MflButtonCode) */
     val kwpPayload: List<Int>,
 )
 
@@ -74,26 +74,26 @@ object MflButtonCode {
 object SzlButtonDecoder {
 
     private data class BitMapping(
-        val byte: Int,         // 0 = matrix1, 1 = matrix2
+        val byte: Int, // 0 = matrix1, 1 = matrix2
         val bit: Int,
         val name: String,
         val mflCode: Int,
     )
 
     private val mappings = listOf(
-        BitMapping(0, 0, "Vol+",        MflButtonCode.VOLUME_UP),
-        BitMapping(0, 1, "Vol-",        MflButtonCode.VOLUME_DOWN),
-        BitMapping(0, 2, "Next",        MflButtonCode.NEXT_TRACK),
-        BitMapping(0, 3, "Prev",        MflButtonCode.PREV_TRACK),
-        BitMapping(0, 4, "Voice",       MflButtonCode.VOICE),
-        BitMapping(0, 5, "Phone ✔",     MflButtonCode.PHONE_ANSWER),
-        BitMapping(0, 6, "Phone ✘",     MflButtonCode.PHONE_END),
-        BitMapping(0, 7, "MODE",        MflButtonCode.MODE),
-        BitMapping(1, 0, "Paddle▶",     MflButtonCode.PADDLE_UP),
-        BitMapping(1, 1, "◀Paddle",     MflButtonCode.PADDLE_DOWN),
-        BitMapping(1, 2, "Sport",       MflButtonCode.SPORT_MODE),
-        BitMapping(1, 3, "HeatWheel",   MflButtonCode.HEAT_WHEEL),
-        BitMapping(1, 4, "OK",          MflButtonCode.OK_SELECT),
+        BitMapping(0, 0, "Vol+", MflButtonCode.VOLUME_UP),
+        BitMapping(0, 1, "Vol-", MflButtonCode.VOLUME_DOWN),
+        BitMapping(0, 2, "Next", MflButtonCode.NEXT_TRACK),
+        BitMapping(0, 3, "Prev", MflButtonCode.PREV_TRACK),
+        BitMapping(0, 4, "Voice", MflButtonCode.VOICE),
+        BitMapping(0, 5, "Phone ✔", MflButtonCode.PHONE_ANSWER),
+        BitMapping(0, 6, "Phone ✘", MflButtonCode.PHONE_END),
+        BitMapping(0, 7, "MODE", MflButtonCode.MODE),
+        BitMapping(1, 0, "Paddle▶", MflButtonCode.PADDLE_UP),
+        BitMapping(1, 1, "◀Paddle", MflButtonCode.PADDLE_DOWN),
+        BitMapping(1, 2, "Sport", MflButtonCode.SPORT_MODE),
+        BitMapping(1, 3, "HeatWheel", MflButtonCode.HEAT_WHEEL),
+        BitMapping(1, 4, "OK", MflButtonCode.OK_SELECT),
     )
 
     fun decode(matrix1: Int, matrix2: Int): SzlButtonFrame {
