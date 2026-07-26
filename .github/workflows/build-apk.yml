@@ -103,7 +103,13 @@ jobs:
       - name: Build Release APK (Attempt 1)
         id: build1
         continue-on-error: true
+        env:
+          KEYSTORE_PATH: /tmp/release.keystore
+          KEY_ALIAS: ${{ secrets.ALIAS }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          echo "${{ secrets.SIGNING_KEY }}" | base64 -d > /tmp/release.keystore
           gradle assembleRelease --no-daemon 2>&1 | tee build-log.txt
           exit ${PIPESTATUS[0]}
 
@@ -140,7 +146,13 @@ jobs:
         id: build2
         if: steps.build1.outcome == 'failure' && inputs.fix_mode == true
         continue-on-error: true
+        env:
+          KEYSTORE_PATH: /tmp/release.keystore
+          KEY_ALIAS: ${{ secrets.ALIAS }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          echo "${{ secrets.SIGNING_KEY }}" | base64 -d > /tmp/release.keystore
           gradle assembleRelease --no-daemon 2>&1 | tee build-log-2.txt
           exit ${PIPESTATUS[0]}
 
@@ -167,7 +179,13 @@ jobs:
       - name: Build Release APK (Attempt 3 - Final)
         id: build3
         if: steps.build2.outcome == 'failure' && inputs.fix_mode == true
+        env:
+          KEYSTORE_PATH: /tmp/release.keystore
+          KEY_ALIAS: ${{ secrets.ALIAS }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
+          echo "${{ secrets.SIGNING_KEY }}" | base64 -d > /tmp/release.keystore
           gradle assembleRelease --no-daemon
 
       # ── Fail if all attempts failed ──
@@ -178,25 +196,13 @@ jobs:
           cat build-log.txt
           exit 1
 
-      # ── Sign APK ──
-      - name: Sign APK
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
-          alias: ${{ secrets.ALIAS }}
-          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-
-      # ── Verify APK Signature ──
-      - name: Verify APK Signature
+      # ── Fail if all attempts failed ──
+      - name: Check Build Status
+        if: steps.build1.outcome == 'failure' && steps.build2.outcome == 'failure' && steps.build3.outcome == 'failure'
         run: |
-          echo "Verifying APK signature..."
-          ls -la app/build/outputs/apk/release/
-          for apk in app/build/outputs/apk/release/*.apk; do
-            echo "Checking: $apk"
-            jarsigner -verify -verbose -certs "$apk" | head -20 || true
-          done
+          echo "ERROR: All build attempts failed. Manual intervention required."
+          cat build-log.txt
+          exit 1
 
       # ── Upload APK ──
       - uses: actions/upload-artifact@v4
@@ -214,4 +220,5 @@ jobs:
             build-log.txt
             build-log-2.txt
             build-errors.txt
+
 
