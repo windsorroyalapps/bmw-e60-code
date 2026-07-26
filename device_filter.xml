@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <usb-device vendor-id="1027" />
+    <usb-device vendor-id="4292" />
+    <usb-device vendor-id="6790" />
+    <usb-device vendor-id="1659" />
+    <!-- Xbox 360 wired controller -->
+    <usb-device vendor-id="1118" product-id="654" />
+    <!-- Xbox One wired controller -->
+    <usb-device vendor-id="1118" product-id="765" />
+    <usb-device vendor-id="1118" product-id="746" />
+    <!-- Generic Xbox-compatible HID gamepad fallback -->
+    <usb-device vendor-id="1118" />
+</resources>
