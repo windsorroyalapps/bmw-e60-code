@@ -223,11 +223,12 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 stopPollingInternal(false)
                 transport?.disconnect()
                 transport = buildTransport(_state.value.profile)
-                val currentTransport = transport ?: run {
-                    _state.value = _state.value.copy(statusMessage = "Transport init failed")
+                val currentTransport = transport
+                if (currentTransport == null) {
+                    _state.update { it.copy(statusMessage = "Transport init failed") }
                     return@launch
                 }
-                session = KdcanSession(currentTransport, currentTarget(), _state.value.profile.vehicleProfile)
+                val newSession = KdcanSession(currentTransport, currentTarget(), _state.value.profile.vehicleProfile)
                 newSession.onConnected(_state.value.profile.settleDelayMs)
                 val profile = newSession.getCommProfile()
                 val vehicleInfo = newSession.tryIdentify()
@@ -1121,4 +1122,5 @@ class MainViewModel(private val application: Application) : ViewModel() {
             }
     }
 }
+
 
