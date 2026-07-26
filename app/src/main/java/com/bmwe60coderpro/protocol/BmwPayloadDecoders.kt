@@ -106,9 +106,9 @@ object BmwPayloadDecoders {
             BmwTargets.KOMBI.name -> decodeKombi(localId, body, map)
             BmwTargets.SZL.name -> decodeSzl(localId, body, map)
             BmwTargets.CAS.name -> decodeCas(localId, body, map)
-            BmwTargets.FRM.name  -> decodeFrm(localId, body, map)
+            BmwTargets.FRM.name -> decodeFrm(localId, body, map)
             BmwTargets.ACSM.name -> decodeAcsm(localId, body, map)
-            BmwTargets.CCC.name  -> decodeCcc(localId, body, map)
+            BmwTargets.CCC.name -> decodeCcc(localId, body, map)
             else -> decodeGenericBlock(body, map)
         }
     }
