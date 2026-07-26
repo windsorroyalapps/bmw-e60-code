@@ -77,10 +77,12 @@ class Elm327Transport(
         connected = false
     }
 
-    override suspend fun write(bytes: ByteArray) = withContext(Dispatchers.IO) {
-        val hex = HexUtils.bytesToHex(bytes)
-        // For KWP over ELM327, we send raw hex bytes
-        sendCommand(hex)
+    override suspend fun write(bytes: ByteArray) {
+        withContext(Dispatchers.IO) {
+            val hex = HexUtils.bytesToHex(bytes)
+            // For KWP over ELM327, we send raw hex bytes
+            sendCommand(hex)
+        }
     }
 
     override suspend fun read(timeoutMs: Int): ByteArray = withContext(Dispatchers.IO) {
@@ -171,3 +173,4 @@ class Elm327Transport(
 
     fun getElmVersion(): String = elmVersion
 }
+
