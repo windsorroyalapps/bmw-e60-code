@@ -17,24 +17,15 @@ on:
         required: false
         default: true
         type: boolean
-      max_iterations:
-        description: 'Maximum fix iterations'
-        required: false
-        default: '3'
-        type: string
 
 env:
   JAVA_VERSION: '17'
 
 jobs:
-  # ═══════════════════════════════════════════════════════
-  # JOB 1: OpenCode Stub Scan
-  # ═════════════════════════════════════════════════════════
   opencode-scan:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
     outputs:
       stubs_found: ${{ steps.scan.outputs.stubs_found }}
     steps:
@@ -52,26 +43,11 @@ jobs:
           python scripts/detect-stubs.py --src=app/src/main/java --format=json --output=stubs-report.json --severity=all
           STUB_COUNT=$(python -c "import json; d=json.load(open('stubs-report.json')); print(d['meta']['stubs_found'])" 2>/dev/null || echo "0")
           echo "stubs_found=$STUB_COUNT" >> $GITHUB_OUTPUT
-          echo "Files scanned: $(python -c "import json; d=json.load(open('stubs-report.json')); print(d['meta']['files_scanned'])")"
-          echo "Stubs found: $STUB_COUNT"
       - uses: actions/upload-artifact@v4
         if: steps.scan.outputs.stubs_found != '0'
         with:
           name: stubs-report-raw
           path: stubs-report.json
-      - name: OpenCode Auto-Complete Stubs
-        if: steps.scan.outputs.stubs_found != '0'
-        env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          echo "Running OpenCode completion engine..."
-          python scripts/complete-stubs.py stubs-report.json
-      - uses: actions/upload-artifact@v4
-        if: steps.scan.outputs.stubs_found != '0'
-        with:
-          name: stubs-completed
-          path: stubs-completed/
       - name: Commit stub fixes
         if: steps.scan.outputs.stubs_found != '0'
         continue-on-error: true
@@ -79,11 +55,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git diff --cached --quiet || (git commit -m "🤖 OpenCode: Auto-fix stubs [ci skip]" && git push)
+          git diff --cached --quiet || (git commit -m "🤖 Auto-fix stubs [ci skip]" && git push)
 
-  # ════════════════════════════════════════════════════════
-  # JOB 2: Build APK with Auto-Fix Loop
-  # ════════════════════════════════════════════════════════
   build-apk:
     runs-on: ubuntu-latest
     needs: opencode-scan
@@ -99,7 +72,6 @@ jobs:
         with:
           gradle-version: 8.7
 
-      # ── Build Attempt 1 ──
       - name: Build Release APK (Attempt 1)
         id: build1
         continue-on-error: true
@@ -113,35 +85,6 @@ jobs:
           gradle assembleRelease --no-daemon 2>&1 | tee build-log.txt
           exit ${PIPESTATUS[0]}
 
-      # ── If Build 1 Failed, Capture Error & Attempt Fix ──
-      - name: Capture Build Errors for OpenCode
-        if: steps.build1.outcome == 'failure' && inputs.fix_mode == true
-        run: |
-          echo "Build failed. Capturing errors for analysis..."
-          # Extract just the error lines
-          grep "^e:" build-log.txt > build-errors.txt || true
-          grep "BUILD FAILED" build-log.txt >> build-errors.txt || true
-          cat build-errors.txt
-
-      - name: OpenCode Fix Build Errors
-        if: steps.build1.outcome == 'failure' && inputs.fix_mode == true
-        env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          echo "Attempting OpenCode auto-fix for build errors..."
-          python scripts/fix-build-errors.py build-errors.txt build-log.txt
-
-      - name: Commit Build Fixes
-        if: steps.build1.outcome == 'failure' && inputs.fix_mode == true
-        continue-on-error: true
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --quiet || (git commit -m "🤖 OpenCode: Auto-fix build errors [ci skip]" && git push)
-
-      # ── Build Attempt 2 (after fixes) ──
       - name: Build Release APK (Attempt 2)
         id: build2
         if: steps.build1.outcome == 'failure' && inputs.fix_mode == true
@@ -156,26 +99,6 @@ jobs:
           gradle assembleRelease --no-daemon 2>&1 | tee build-log-2.txt
           exit ${PIPESTATUS[0]}
 
-      # ── If Build 2 Failed, Capture Error & Attempt Fix Again ──
-      - name: OpenCode Fix Build Errors (Round 2)
-        if: steps.build2.outcome == 'failure' && inputs.fix_mode == true
-        env:
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: |
-          echo "Attempting OpenCode auto-fix round 2..."
-          python scripts/fix-build-errors.py build-errors.txt build-log-2.txt
-
-      - name: Commit Build Fixes (Round 2)
-        if: steps.build2.outcome == 'failure' && inputs.fix_mode == true
-        continue-on-error: true
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --quiet || (git commit -m "🤖 OpenCode: Auto-fix build errors round 2 [ci skip]" && git push)
-
-      # ── Build Attempt 3 (final) ──
       - name: Build Release APK (Attempt 3 - Final)
         id: build3
         if: steps.build2.outcome == 'failure' && inputs.fix_mode == true
@@ -188,37 +111,15 @@ jobs:
           echo "${{ secrets.SIGNING_KEY }}" | base64 -d > /tmp/release.keystore
           gradle assembleRelease --no-daemon
 
-      # ── Fail if all attempts failed ──
       - name: Check Build Status
         if: steps.build1.outcome == 'failure' && steps.build2.outcome == 'failure' && steps.build3.outcome == 'failure'
         run: |
-          echo "ERROR: All build attempts failed. Manual intervention required."
+          echo "ERROR: All build attempts failed."
           cat build-log.txt
           exit 1
 
-      # ── Fail if all attempts failed ──
-      - name: Check Build Status
-        if: steps.build1.outcome == 'failure' && steps.build2.outcome == 'failure' && steps.build3.outcome == 'failure'
-        run: |
-          echo "ERROR: All build attempts failed. Manual intervention required."
-          cat build-log.txt
-          exit 1
-
-      # ── Upload APK ──
       - uses: actions/upload-artifact@v4
         with:
           name: bmw-e60-coder-pro-release
           path: app/build/outputs/apk/release/*.apk
           retention-days: 30
-
-      # ── Upload error logs on failure ──
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: build-logs
-          path: |
-            build-log.txt
-            build-log-2.txt
-            build-errors.txt
-
-
