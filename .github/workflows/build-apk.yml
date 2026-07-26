@@ -62,6 +62,7 @@ jobs:
           path: stubs-completed/
       - name: Create Pull Request with Completions
         if: steps.scan.outputs.stubs_found != '0' && github.event_name == 'push'
+        continue-on-error: true
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
