@@ -2,11 +2,38 @@
   "meta": {
     "scanner": "opencode-stub-detector",
     "version": "1.0.0",
-    "files_scanned": 28,
-    "stubs_found": 4,
+    "files_scanned": 32,
+    "stubs_found": 7,
     "severity_filter": "all"
   },
   "stubs": [
+    {
+      "file": "app/src/main/java/com/bmwe60coderpro/network/Elm327Transport.kt",
+      "line": 105,
+      "column": 28,
+      "type": "placeholder_return",
+      "severity": "partial",
+      "context": "  99:         out.write(\"$cmd\\r\".toByteArray())\n 100:         out.flush()\n 101:         return readRawResponse(500)\n 102:     }\n 103: \n 104:     private fun readRawResponse(timeoutMs: Int): String {\n 105:         val inp = input ?: return \"\"\n 106:         val buffer = StringBuilder()\n 107:         val start = System.currentTimeMillis()\n 108:         while (System.currentTimeMillis() - start < timeoutMs) {\n 109:             if (inp.available() > 0) {\n 110:                 val b = inp.read()\n 111:                 if (b == '>'.code) break // ELM prompt",
+      "suggestion_prompt": "Complete the following Kotlin stub in `app/src/main/java/com/bmwe60coderpro/network/Elm327Transport.kt`.\nDetected pattern: placeholder_return\nSeverity: partial\nMatched code:\n```kotlin\nreturn \"\"\n```\nContext:\n```kotlin\n  99:         out.write(\"$cmd\\r\".toByteArray())\n 100:         out.flush()\n 101:         return readRawResponse(500)\n 102:     }\n 103: \n 104:     private fun readRawResponse(timeoutMs: Int): String {\n 105:         val inp = input ?: return \"\"\n 106:         val buffer = StringBuilder()\n 107:         val start = System.currentTimeMillis()\n 108:         while (System.currentTimeMillis() - start < timeoutMs) {\n 109:             if (inp.available() > 0) {\n 110:                 val b = inp.read()\n 111:                 if (b == '>'.code) break // ELM prompt\n```\nPlease provide a complete, production-ready implementation that:\n1. Fulfills the function's declared contract and return type\n2. Handles edge cases and errors appropriately\n3. Follows Kotlin best practices\n4. Integrates with the existing BMW E60 Coder Pro architecture (OBD2, CAN bus, Compose UI)\n5. Includes brief inline comments explaining non-obvious logic\nOutput ONLY the replacement code block (no explanations outside the code)."
+    },
+    {
+      "file": "app/src/main/java/com/bmwe60coderpro/network/EnetTransport.kt",
+      "line": 87,
+      "column": 28,
+      "type": "placeholder_return",
+      "severity": "partial",
+      "context": "  81:         )\n  82:         return header + payload\n  83:     }\n  84: \n  85:     /** Parse a BMW-FAST frame from ENET. */\n  86:     fun parseFastFrame(data: ByteArray): Pair<Int, ByteArray>? {\n  87:         if (data.size < 4) return null\n  88:         val length = ((data[0].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)\n  89:         val target = data[2].toInt() and 0xFF\n  90:         if (data.size < 4 + length) return null\n  91:         return target to data.copyOfRange(4, 4 + length)\n  92:     }\n  93: }",
+      "suggestion_prompt": "Complete the following Kotlin stub in `app/src/main/java/com/bmwe60coderpro/network/EnetTransport.kt`.\nDetected pattern: placeholder_return\nSeverity: partial\nMatched code:\n```kotlin\nreturn null\n```\nContext:\n```kotlin\n  81:         )\n  82:         return header + payload\n  83:     }\n  84: \n  85:     /** Parse a BMW-FAST frame from ENET. */\n  86:     fun parseFastFrame(data: ByteArray): Pair<Int, ByteArray>? {\n  87:         if (data.size < 4) return null\n  88:         val length = ((data[0].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)\n  89:         val target = data[2].toInt() and 0xFF\n  90:         if (data.size < 4 + length) return null\n  91:         return target to data.copyOfRange(4, 4 + length)\n  92:     }\n  93: }\n```\nPlease provide a complete, production-ready implementation that:\n1. Fulfills the function's declared contract and return type\n2. Handles edge cases and errors appropriately\n3. Follows Kotlin best practices\n4. Integrates with the existing BMW E60 Coder Pro architecture (OBD2, CAN bus, Compose UI)\n5. Includes brief inline comments explaining non-obvious logic\nOutput ONLY the replacement code block (no explanations outside the code)."
+    },
+    {
+      "file": "app/src/main/java/com/bmwe60coderpro/network/EnetTransport.kt",
+      "line": 90,
+      "column": 37,
+      "type": "placeholder_return",
+      "severity": "partial",
+      "context": "  84: \n  85:     /** Parse a BMW-FAST frame from ENET. */\n  86:     fun parseFastFrame(data: ByteArray): Pair<Int, ByteArray>? {\n  87:         if (data.size < 4) return null\n  88:         val length = ((data[0].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)\n  89:         val target = data[2].toInt() and 0xFF\n  90:         if (data.size < 4 + length) return null\n  91:         return target to data.copyOfRange(4, 4 + length)\n  92:     }\n  93: }",
+      "suggestion_prompt": "Complete the following Kotlin stub in `app/src/main/java/com/bmwe60coderpro/network/EnetTransport.kt`.\nDetected pattern: placeholder_return\nSeverity: partial\nMatched code:\n```kotlin\nreturn null\n```\nContext:\n```kotlin\n  84: \n  85:     /** Parse a BMW-FAST frame from ENET. */\n  86:     fun parseFastFrame(data: ByteArray): Pair<Int, ByteArray>? {\n  87:         if (data.size < 4) return null\n  88:         val length = ((data[0].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)\n  89:         val target = data[2].toInt() and 0xFF\n  90:         if (data.size < 4 + length) return null\n  91:         return target to data.copyOfRange(4, 4 + length)\n  92:     }\n  93: }\n```\nPlease provide a complete, production-ready implementation that:\n1. Fulfills the function's declared contract and return type\n2. Handles edge cases and errors appropriately\n3. Follows Kotlin best practices\n4. Integrates with the existing BMW E60 Coder Pro architecture (OBD2, CAN bus, Compose UI)\n5. Includes brief inline comments explaining non-obvious logic\nOutput ONLY the replacement code block (no explanations outside the code)."
+    },
     {
       "file": "app/src/main/java/com/bmwe60coderpro/controller/XboxControllerManager.kt",
       "line": 196,
