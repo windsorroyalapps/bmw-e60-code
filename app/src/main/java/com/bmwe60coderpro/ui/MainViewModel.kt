@@ -21,7 +21,10 @@ import com.bmwe60coderpro.data.RemoteStartMode
 import com.bmwe60coderpro.network.SimRemoteTransport
 import com.bmwe60coderpro.network.TcpObdTransport
 import com.bmwe60coderpro.protocol.BmwCommProfiles
+import com.bmwe60coderpro.protocol.BmwJob
 import com.bmwe60coderpro.protocol.BmwJobs
+import com.bmwe60coderpro.protocol.JobCategory
+import com.bmwe60coderpro.protocol.JobStep
 import com.bmwe60coderpro.protocol.BmwTargets
 import com.bmwe60coderpro.protocol.DatenManager
 import com.bmwe60coderpro.protocol.E60AddressBook
