@@ -3,10 +3,19 @@
     "scanner": "opencode-stub-detector",
     "version": "1.0.0",
     "files_scanned": 28,
-    "stubs_found": 3,
+    "stubs_found": 4,
     "severity_filter": "all"
   },
   "stubs": [
+    {
+      "file": "app/src/main/java/com/bmwe60coderpro/controller/XboxControllerManager.kt",
+      "line": 196,
+      "column": 9,
+      "type": "placeholder_return",
+      "severity": "partial",
+      "context": " 190:                 val isJoystick = (src and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK\n 191:                 if (isGamepad || isJoystick) {\n 192:                     return device\n 193:                 }\n 194:             }\n 195:         }\n 196:         return null\n 197:     }\n 198: }",
+      "suggestion_prompt": "Complete the following Kotlin stub in `app/src/main/java/com/bmwe60coderpro/controller/XboxControllerManager.kt`.\nDetected pattern: placeholder_return\nSeverity: partial\nMatched code:\n```kotlin\nreturn null\n```\nContext:\n```kotlin\n 190:                 val isJoystick = (src and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK\n 191:                 if (isGamepad || isJoystick) {\n 192:                     return device\n 193:                 }\n 194:             }\n 195:         }\n 196:         return null\n 197:     }\n 198: }\n```\nPlease provide a complete, production-ready implementation that:\n1. Fulfills the function's declared contract and return type\n2. Handles edge cases and errors appropriately\n3. Follows Kotlin best practices\n4. Integrates with the existing BMW E60 Coder Pro architecture (OBD2, CAN bus, Compose UI)\n5. Includes brief inline comments explaining non-obvious logic\nOutput ONLY the replacement code block (no explanations outside the code)."
+    },
     {
       "file": "app/src/main/java/com/bmwe60coderpro/ui/MainViewModel.kt",
       "line": 492,
