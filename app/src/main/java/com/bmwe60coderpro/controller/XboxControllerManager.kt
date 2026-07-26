@@ -183,10 +183,10 @@ object XboxControllerManager {
     fun findAttachedController(): InputDevice? {
         return InputDevice.getDeviceIds()
             .mapNotNull { InputDevice.getDevice(it) }
-            .firstOrNull { device ->
+            .firstOrNull { device: InputDevice ->
                 val src = device.sources
-                (src and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD) ||
-                (src and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK)
+                ((src and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD) ||
+                ((src and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK)
             }
     }
 }
