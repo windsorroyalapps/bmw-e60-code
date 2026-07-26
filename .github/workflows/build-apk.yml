@@ -99,8 +99,11 @@ jobs:
       - run: ./gradlew testDebugUnitTest --no-daemon
       - run: ./gradlew assembleRelease --no-daemon
       - name: Sign APK
-        if: ${{ secrets.SIGNING_KEYSTORE != '' }}
+        if: ${{ env.SIGNING_KEYSTORE != '' }}
+        continue-on-error: true
         uses: r0adkll/sign-android-release@v1
+        env:
+          SIGNING_KEYSTORE: ${{ secrets.SIGNING_KEYSTORE }}
         with:
           releaseDirectory: app/build/outputs/apk/release
           signingKeyBase64: ${{ secrets.SIGNING_KEYSTORE }}
