@@ -149,30 +149,15 @@ object SteeringRetrofitManager {
     )
 
     private val templates = mapOf(
-        "SZL" to "SZL {
-  SZL_LENKRAD_TYP = E_SERIE;
-  MULTIFUNKTION = nicht_aktiv;
-  SPORT_TASTE = nicht_aktiv;
-  TELEFON_TASTE = nicht_aktiv;
-  LENKRAD_HEIZUNG = nicht_aktiv;
-}
-",
-        "KOMBI" to "KOMBI {
-  MFL = nicht_aktiv;
-}
-",
-        "EGS" to "EGS {
-  EGS_SCHALTWIPPEN = nicht_aktiv;
-}
-",
+        "SZL" to "SZL {\n  SZL_LENKRAD_TYP = E_SERIE;\n  MULTIFUNKTION = nicht_aktiv;\n  SPORT_TASTE = nicht_aktiv;\n  TELEFON_TASTE = nicht_aktiv;\n  LENKRAD_HEIZUNG = nicht_aktiv;\n}\n",
+        "KOMBI" to "KOMBI {\n  MFL = nicht_aktiv;\n}\n",
+        "EGS" to "EGS {\n  EGS_SCHALTWIPPEN = nicht_aktiv;\n}\n",
     )
 
     fun preset(kind: SteeringRetrofitPresetKind): SteeringRetrofitPreset = presets.first { it.kind == kind }
 
     fun renderModulePatch(module: String, kind: SteeringRetrofitPresetKind? = null): String {
-        val base = DatenManager.parse(templates[module] ?: "$module {
-}
-")
+        val base = DatenManager.parse(templates[module] ?: "$module {\n}\n")
         val values = base.values.toMutableMap()
         if (kind != null) {
             preset(kind).modulePatches
@@ -186,22 +171,15 @@ object SteeringRetrofitManager {
     fun exportBundle(kind: SteeringRetrofitPresetKind): String {
         val p = preset(kind)
         return buildString {
-            append("Retrofit pack: ").append(p.label).append("
-")
-            append(p.description).append("
-
-")
+            append("Retrofit pack: ").append(p.label).append("\n")
+            append(p.description).append("\n\n")
             p.modulePatches.forEach { patch ->
-                append(patch.module).append("
-")
-                append(renderModulePatch(patch.module, kind)).append("
-")
+                append(patch.module).append("\n")
+                append(renderModulePatch(patch.module, kind)).append("\n")
             }
-            append("Validation checklist
-")
+            append("Validation checklist\n")
             p.validationChecklist.forEachIndexed { index, item ->
-                append(index + 1).append(". ").append(item).append("
-")
+                append(index + 1).append(". ").append(item).append("\n")
             }
         }
     }
@@ -209,21 +187,14 @@ object SteeringRetrofitManager {
     fun preview(kind: SteeringRetrofitPresetKind): String {
         val p = preset(kind)
         return buildString {
-            append(p.label).append(": ").append(p.description).append("
-
-")
+            append(p.label).append(": ").append(p.description).append("\n\n")
             p.modulePatches.forEach { patch ->
-                append("[").append(patch.module).append("] ").append(patch.description).append("
-")
-                patch.changes.forEach { change -> append("- ").append(change.parameter).append(" = ").append(change.value).append("
-") }
-                append("
-")
+                append("[").append(patch.module).append("] ").append(patch.description).append("\n")
+                patch.changes.forEach { change -> append("- ").append(change.parameter).append(" = ").append(change.value).append("\n") }
+                append("\n")
             }
-            append("Validation
-")
-            p.validationChecklist.forEach { append("- ").append(it).append("
-") }
+            append("Validation\n")
+            p.validationChecklist.forEach { append("- ").append(it).append("\n") }
         }
     }
 }
