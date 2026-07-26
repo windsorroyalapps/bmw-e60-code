@@ -43,7 +43,7 @@ object BmwTargets {
     val FRM = EcuTarget("FRM / LM", 0x60)
 
     val ACSM = EcuTarget("ACSM", 0x57)
-    val CCC  = EcuTarget("CCC",  0x68)
+    val CCC = EcuTarget("CCC", 0x68)
 
     val defaults = listOf(DME, EGS, DSC, KOMBI, SZL, CAS, FRM, ACSM, CCC)
 }
