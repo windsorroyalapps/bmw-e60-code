@@ -1,55 +1,45 @@
-# BMW E60 Coder Pro (Native Android)
+# BMW E60 Coder Pro
 
-Current full-source Android project for the BMW E60 Coder APK.
+Cross-platform mobile app for BMW E60/E61 vehicle tuning and diagnostics via OBD2/CAN bus.
 
-## Included now
+## Features
 
-- USB host serial communication for K+DCAN-style adapters
-- Ethernet/TCP OBD communication
-- Adapter presets for FTDI, CH340, ENET, and generic TCP bridges
-- BMW-oriented KWP-style preset jobs
-- E60 module-specific probe packs
-- Decoded payload output with starter E60 dictionaries and live-data labels
-- Target-aware comm profiles and adapter-level timing presets
-- E60 vehicle profiles and ECU-family address-book switching
-- Dedicated BMW service screens for DME, EGS, DSC, KOMBI, SZL, CAS, and FRM/LM
-- Live home dashboard polling cards for DME, EGS, DSC, and CAS
-- Daten parser / renderer with coding presets and patch preview
-- CCC / tuning planning screens for Comfort, Sport, Race, and Custom map-slot workflows
-- Steering retrofit helper screen for F-series wheel / paddle coding hints
-- Flash-plan generator with dry-run and expert-plan modes
-- Experimental preparation screens for remote-control and controller workflows
+- **KWP2000/BMW-FAST Protocol** — Full diagnostic session management
+- **Live Data Polling** — Real-time DME, EGS, DSC, KOMBI, SZL, CAS, FRM, ACSM, CCC data
+- **DTC Reading/Clearing** — 100+ module-specific fault codes
+- **Coding Engine** — Read and write module coding via KWP 0x3B
+- **CAS Remote Start/Stop** — Engine control sequences (experimental)
+- **Xbox Controller Bridge** — USB gamepad to vehicle input mapping
+- **Multi-Adapter Support** — USB FTDI, ELM327 Bluetooth/WiFi, ENET WiFi
 
-## What exceeds the original design document
+## Supported Adapters
 
-The original design document was written for Expo/React Native. This project now exceeds that plan by using a native Android stack for lower-level transport support, adding dedicated service pages, live polling, E60 address books, comm profiles, payload decoders, coding presets, and flash-plan tooling.
+| Adapter | Connection | Protocol |
+|---------|-----------|----------|
+| FTDI FT232RL | USB | K+DCAN |
+| ELM327 (PIC18F25K80) | Bluetooth/WiFi | KWP2000/BMW-FAST |
+| ENET Cable | WiFi | BMW-FAST |
+| CH340/CP2102 | USB | K+DCAN |
 
-## Build
+## CAN Bus Support
 
-1. Open in Android Studio.
-2. Let Gradle sync.
-3. Build `app` on a real Android device with OTG for USB testing.
+- **PT-CAN (500 kbps)** — Engine, transmission, DSC, steering
+- **K-CAN (100 kbps)** — Doors, windows, climate, iDrive, lighting
 
-## Notes
+## Building
 
-- Coding and flash planning are implemented as real local tooling.
-- Flashing is dry-run by default.
-- Experimental remote/gamepad features are intentionally kept in prepared or simulated mode by default rather than silently auto-arming live actuation.
-- Treat the app as an advanced experimental BMW tool, not a full INPA / ISTA / EDIABAS replacement.
+Requires Android Studio with JDK 17.
 
+```bash
+./gradlew assembleRelease
+```
 
-## Production hardening added
+APK is signed automatically via GitHub Actions.
 
-- Android USB permission request flow added for USB host serial devices
-- Release build now enables code shrinking and resource shrinking
-- JitPack repository added so `usb-serial-for-android` resolves during Gradle sync
-- Lifecycle-aware Compose state collection
-- App settings persistence for transport, preset, vehicle profile, polling interval, and selected screen
+## Safety Warning
 
+This is an experimental research tool. Never use while vehicle is in motion without a co-pilot. All injection is disabled by default and requires explicit arming.
 
-## Added in this build
+## License
 
-- SZL/KOMBI/EGS steering retrofit bundle generator for F-series wheel to E-series retrofit planning
-- Hardware validation matrix in `docs/HARDWARE_VALIDATION_MATRIX.md`
-- SZL retrofit workflow in `docs/SZL_FSERIES_RETROFIT_WORKFLOW.md`
-- JVM unit tests for DatenManager and SteeringRetrofitManager
+MIT — Use at your own risk.
