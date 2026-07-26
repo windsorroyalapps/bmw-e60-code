@@ -96,9 +96,9 @@ jobs:
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
-      - run: chmod +x gradlew
-      - run: ./gradlew testDebugUnitTest --no-daemon
-      - run: ./gradlew assembleRelease --no-daemon
+      - run: gradle wrapper --gradle-version 8.7
+      - run: gradle testDebugUnitTest --no-daemon
+      - run: gradle assembleRelease --no-daemon
       - name: Sign APK
         if: ${{ env.SIGNING_KEYSTORE != '' }}
         continue-on-error: true
