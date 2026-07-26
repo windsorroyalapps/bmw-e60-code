@@ -10,14 +10,14 @@ import com.bmwe60coderpro.util.HexUtils
  * KWP format.
  *
  * The injection approach:
- *   1. The app reads SZL 0x21/0x02 continuously via the K+DCAN adapter.
- *   2. [SzlButtonDecoder] converts raw bytes into [SzlButtonFrame] + [MflEvent] list.
- *   3. This class builds and transmits one KWP 0x30 frame per active MflEvent per poll cycle.
- *   4. A short de-bounce window prevents re-firing held buttons every poll tick.
+ * 1. The app reads SZL 0x21/0x02 continuously via the K+DCAN adapter.
+ * 2. [SzlButtonDecoder] converts raw bytes into [SzlButtonFrame] + [MflEvent] list.
+ * 3. This class builds and transmits one KWP 0x30 frame per active MflEvent per poll cycle.
+ * 4. A short de-bounce window prevents re-firing held buttons every poll tick.
  *
  * Frame structure (KWP over K-line / KDCAN):
- *   [0x80 | len] [target=0x80 KOMBI] [source=0xF1 tester] [0x30 service] [0xA0 localId]
- *   [0x03 control=freeze-current-state] [button_code] [checksum]
+ * [0x80 | len] [target=0x80 KOMBI] [source=0xF1 tester] [0x30 service] [0xA0 localId]
+ * [0x03 control=freeze-current-state] [button_code] [checksum]
  *
  * Safety note: This is a diagnostic-channel command (KWP service 0x30). It does not write
  * permanent coding data. The KOMBI treats 0x30 as a temporary input override and reverts
@@ -37,9 +37,9 @@ object MflInjector {
     /**
      * Build and inject a single MFL event into KOMBI.
      *
-     * @param session   Active [KdcanSession] already connected and pointed at KOMBI (0x80).
-     * @param event     The [MflEvent] to inject.
-     * @param dryRun    If true, build the frame but do not transmit it.
+     * @param session Active [KdcanSession] already connected and pointed at KOMBI (0x80).
+     * @param event The [MflEvent] to inject.
+     * @param dryRun If true, build the frame but do not transmit it.
      */
     suspend fun inject(
         session: KdcanSession,
