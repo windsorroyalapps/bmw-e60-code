@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "scanner": "opencode-stub-detector",
+    "version": "1.0.0",
+    "files_scanned": 28,
+    "stubs_found": 3,
+    "severity_filter": "all"
+  },
+  "stubs": [
+    {
+      "file": "app/src/main/java/com/bmwe60coderpro/ui/MainViewModel.kt",
+      "line": 489,
+      "column": 21,
+      "type": "placeholder_return",
+      "severity": "partial",
+      "context": " 483:             KeyEvent.KEYCODE_BUTTON_B     -> if (isDown) triggerEmergencyStop()\n 484:             KeyEvent.KEYCODE_BUTTON_R1    -> if (isDown) sendPaddleEvent(up = true)\n 485:             KeyEvent.KEYCODE_BUTTON_L1    -> if (isDown) sendPaddleEvent(up = false)\n 486:             KeyEvent.KEYCODE_BUTTON_START -> if (isDown) log(\"CTRL\", \"Sport mode on (hint)\")\n 487:             KeyEvent.KEYCODE_BUTTON_SELECT, KeyEvent.KEYCODE_BUTTON_MODE ->\n 488:                 if (isDown) log(\"CTRL\", \"Sport mode off (hint)\")\n 489:             else -> return false\n 490:         }\n 491:         return true\n 492:     }\n 493: \n 494:     fun setControllerDryRun(dryRun: Boolean) {\n 495:         _state.value = _state.value.copy(controllerDryRun = dryRun)",
+      "suggestion_prompt": "Complete the following Kotlin stub in `app/src/main/java/com/bmwe60coderpro/ui/MainViewModel.kt`.\nDetected pattern: placeholder_return\nSeverity: partial\nMatched code:\n```kotlin\nreturn false\n```\nContext:\n```kotlin\n 483:             KeyEvent.KEYCODE_BUTTON_B     -> if (isDown) triggerEmergencyStop()\n 484:             KeyEvent.KEYCODE_BUTTON_R1    -> if (isDown) sendPaddleEvent(up = true)\n 485:             KeyEvent.KEYCODE_BUTTON_L1    -> if (isDown) sendPaddleEvent(up = false)\n 486:             KeyEvent.KEYCODE_BUTTON_START -> if (isDown) log(\"CTRL\", \"Sport mode on (hint)\")\n 487:             KeyEvent.KEYCODE_BUTTON_SELECT, KeyEvent.KEYCODE_BUTTON_MODE ->\n 488:                 if (isDown) log(\"CTRL\", \"Sport mode off (hint)\")\n 489:             else -> return false\n 490:         }\n 491:         return true\n 492:     }\n 493: \n 494:     fun setControllerDryRun(dryRun: Boolean) {\n 495:         _state.value = _state.value.copy(controllerDryRun = dryRun)\n```\nPlease provide a complete, production-ready implementation that:\n1. Fulfills the function's declared contract and return type\n2. Handles edge cases and errors appropriately\n3. Follows Kotlin best practices\n4. Integrates with the existing BMW E60 Coder Pro architecture (OBD2, CAN bus, Compose UI)\n5. Includes brief inline comments explaining non-obvious logic\nOutput ONLY the replacement code block (no explanations outside the code)."
+    },
+    {
+      "file": "app/src/main/java/com/bmwe60coderpro/protocol/BmwPayloadDecoders.kt",
+      "line": 443,
+      "column": 43,
+      "type": "placeholder_return",
+      "severity": "partial",
+      "context": " 437: \n 438:     private fun extractPartNumber(text: String): String? {\n 439:         return Regex(\"\\b(?:[0-9]{7}|[0-9]{11})\\b\").find(text)?.value\n 440:     }\n 441: \n 442:     private fun u16(data: List<Int>, index: Int): Int? {\n 443:         val hi = data.getOrNull(index) ?: return null\n 444:         val lo = data.getOrNull(index + 1) ?: return null\n 445:         return ((hi and 0xFF) shl 8) or (lo and 0xFF)\n 446:     }\n 447: \n 448:     private fun toBits(value: Int): String = (7 downTo 0).joinToString(\"\") { bit -> if ((value shr bit) and 1 == 1) \"1\" else \"0\" }\n 449: ",
+      "suggestion_prompt": "Complete the following Kotlin stub in `app/src/main/java/com/bmwe60coderpro/protocol/BmwPayloadDecoders.kt`.\nDetected pattern: placeholder_return\nSeverity: partial\nMatched code:\n```kotlin\nreturn null\n```\nContext:\n```kotlin\n 437: \n 438:     private fun extractPartNumber(text: String): String? {\n 439:         return Regex(\"\\b(?:[0-9]{7}|[0-9]{11})\\b\").find(text)?.value\n 440:     }\n 441: \n 442:     private fun u16(data: List<Int>, index: Int): Int? {\n 443:         val hi = data.getOrNull(index) ?: return null\n 444:         val lo = data.getOrNull(index + 1) ?: return null\n 445:         return ((hi and 0xFF) shl 8) or (lo and 0xFF)\n 446:     }\n 447: \n 448:     private fun toBits(value: Int): String = (7 downTo 0).joinToString(\"\") { bit -> if ((value shr bit) and 1 == 1) \"1\" else \"0\" }\n 449: \n```\nPlease provide a complete, production-ready implementation that:\n1. Fulfills the function's declared contract and return type\n2. Handles edge cases and errors appropriately\n3. Follows Kotlin best practices\n4. Integrates with the existing BMW E60 Coder Pro architecture (OBD2, CAN bus, Compose UI)\n5. Includes brief inline comments explaining non-obvious logic\nOutput ONLY the replacement code block (no explanations outside the code)."
+    },
+    {
+      "file": "app/src/main/java/com/bmwe60coderpro/protocol/BmwPayloadDecoders.kt",
+      "line": 444,
+      "column": 47,
+      "type": "placeholder_return",
+      "severity": "partial",
+      "context": " 438:     private fun extractPartNumber(text: String): String? {\n 439:         return Regex(\"\\b(?:[0-9]{7}|[0-9]{11})\\b\").find(text)?.value\n 440:     }\n 441: \n 442:     private fun u16(data: List<Int>, index: Int): Int? {\n 443:         val hi = data.getOrNull(index) ?: return null\n 444:         val lo = data.getOrNull(index + 1) ?: return null\n 445:         return ((hi and 0xFF) shl 8) or (lo and 0xFF)\n 446:     }\n 447: \n 448:     private fun toBits(value: Int): String = (7 downTo 0).joinToString(\"\") { bit -> if ((value shr bit) and 1 == 1) \"1\" else \"0\" }\n 449: \n 450:     private fun oneDecimal(value: Double): String = ((value * 10.0).roundToInt() / 10.0).toString()",
+      "suggestion_prompt": "Complete the following Kotlin stub in `app/src/main/java/com/bmwe60coderpro/protocol/BmwPayloadDecoders.kt`.\nDetected pattern: placeholder_return\nSeverity: partial\nMatched code:\n```kotlin\nreturn null\n```\nContext:\n```kotlin\n 438:     private fun extractPartNumber(text: String): String? {\n 439:         return Regex(\"\\b(?:[0-9]{7}|[0-9]{11})\\b\").find(text)?.value\n 440:     }\n 441: \n 442:     private fun u16(data: List<Int>, index: Int): Int? {\n 443:         val hi = data.getOrNull(index) ?: return null\n 444:         val lo = data.getOrNull(index + 1) ?: return null\n 445:         return ((hi and 0xFF) shl 8) or (lo and 0xFF)\n 446:     }\n 447: \n 448:     private fun toBits(value: Int): String = (7 downTo 0).joinToString(\"\") { bit -> if ((value shr bit) and 1 == 1) \"1\" else \"0\" }\n 449: \n 450:     private fun oneDecimal(value: Double): String = ((value * 10.0).roundToInt() / 10.0).toString()\n```\nPlease provide a complete, production-ready implementation that:\n1. Fulfills the function's declared contract and return type\n2. Handles edge cases and errors appropriately\n3. Follows Kotlin best practices\n4. Integrates with the existing BMW E60 Coder Pro architecture (OBD2, CAN bus, Compose UI)\n5. Includes brief inline comments explaining non-obvious logic\nOutput ONLY the replacement code block (no explanations outside the code)."
+    }
+  ]
+}
