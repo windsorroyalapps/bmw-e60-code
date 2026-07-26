@@ -1,14 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <usb-device vendor-id="1027" />
-    <usb-device vendor-id="4292" />
-    <usb-device vendor-id="6790" />
-    <usb-device vendor-id="1659" />
-    <!-- Xbox 360 wired controller -->
-    <usb-device vendor-id="1118" product-id="654" />
-    <!-- Xbox One wired controller -->
-    <usb-device vendor-id="1118" product-id="765" />
-    <usb-device vendor-id="1118" product-id="746" />
-    <!-- Generic Xbox-compatible HID gamepad fallback -->
-    <usb-device vendor-id="1118" />
+    <!-- FTDI FT232RL/FT232R (common K+DCAN cables) -->
+    <usb-device vendor-id="1027" product-id="24577" />
+    <!-- FTDI FT2232H -->
+    <usb-device vendor-id="1027" product-id="24592" />
+    <!-- FTDI FT232H -->
+    <usb-device vendor-id="1027" product-id="24596" />
+    <!-- FTDI FT230X -->
+    <usb-device vendor-id="1027" product-id="24597" />
+    <!-- Prolific PL2303 -->
+    <usb-device vendor-id="1659" product-id="8963" />
+    <!-- CH340/CH341 -->
+    <usb-device vendor-id="6790" product-id="21795" />
+    <usb-device vendor-id="6790" product-id="29987" />
+    <!-- CP2102/CP210x -->
+    <usb-device vendor-id="4292" product-id="60000" />
 </resources>
