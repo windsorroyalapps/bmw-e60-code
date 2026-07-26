@@ -1,5 +1,7 @@
 package com.bmwe60coderpro.protocol
 
+import com.bmwe60coderpro.util.HexUtils
+
 /**
  * E60 / E61 K-CAN (100 kbps) and PT-CAN (500 kbps) message database.
  *
@@ -555,3 +557,4 @@ object E60CanBus {
             .joinToString("")
     }
 }
+
