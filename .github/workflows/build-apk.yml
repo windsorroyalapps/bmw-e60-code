@@ -29,7 +29,7 @@ env:
 jobs:
   # ═══════════════════════════════════════════════════════
   # JOB 1: OpenCode Stub Scan
-  # ═══════════════════════════════════════════════════════
+  # ═════════════════════════════════════════════════════════
   opencode-scan:
     runs-on: ubuntu-latest
     permissions:
@@ -80,9 +80,9 @@ jobs:
           git add -A
           git diff --cached --quiet || (git commit -m "🤖 OpenCode: Auto-fix stubs [ci skip]" && git push)
 
-  # ═══════════════════════════════════════════════════════
+  # ════════════════════════════════════════════════════════
   # JOB 2: Build APK with Auto-Fix Loop
-  # ═══════════════════════════════════════════════════════
+  # ════════════════════════════════════════════════════════
   build-apk:
     runs-on: ubuntu-latest
     needs: opencode-scan
@@ -177,15 +177,23 @@ jobs:
 
       # ── Sign APK ──
       - name: Sign APK
-        if: env.SIGNING_KEYSTORE != ''
-        continue-on-error: true
         uses: r0adkll/sign-android-release@v1
         with:
           releaseDirectory: app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.SIGNING_KEYSTORE }}
-          alias: ${{ secrets.SIGNING_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.SIGNING_KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+          alias: ${{ secrets.ALIAS }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+
+      # ── Verify APK Signature ──
+      - name: Verify APK Signature
+        run: |
+          echo "Verifying APK signature..."
+          ls -la app/build/outputs/apk/release/
+          for apk in app/build/outputs/apk/release/*.apk; do
+            echo "Checking: $apk"
+            jarsigner -verify -verbose -certs "$apk" | head -20 || true
+          done
 
       # ── Upload APK ──
       - uses: actions/upload-artifact@v4
