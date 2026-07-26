@@ -74,6 +74,7 @@ jobs:
           path: stubs-completed/
       - name: Commit stub fixes
         if: steps.scan.outputs.stubs_found != '0'
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -127,6 +128,7 @@ jobs:
 
       - name: Commit Build Fixes
         if: steps.build1.outcome == 'failure' && inputs.fix_mode == true
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -154,6 +156,7 @@ jobs:
 
       - name: Commit Build Fixes (Round 2)
         if: steps.build2.outcome == 'failure' && inputs.fix_mode == true
+        continue-on-error: true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -211,3 +214,4 @@ jobs:
             build-log.txt
             build-log-2.txt
             build-errors.txt
+
