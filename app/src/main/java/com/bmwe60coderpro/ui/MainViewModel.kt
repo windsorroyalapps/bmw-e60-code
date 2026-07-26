@@ -223,11 +223,12 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 stopPollingInternal(false)
                 transport?.disconnect()
                 transport = buildTransport(_state.value.profile)
-                transport!!.connect(_state.value.selectedDeviceId)
-                session = KdcanSession(transport!!, currentTarget(), _state.value.profile.vehicleProfile)
-                session!!.onConnected(_state.value.profile.settleDelayMs)
-                val profile = session!!.getCommProfile()
-                val vehicleInfo = session!!.tryIdentify()
+                transport?.connect(_state.value.selectedDeviceId) ?: run { _state.update { it.copy(statusMessage = "Transport not initialized") }; return@launch }
+                val newSession = KdcanSession(transport ?: return@launch, currentTarget(), _state.value.profile.vehicleProfile)
+                newSession.onConnected(_state.value.profile.settleDelayMs)
+                val profile = newSession.getCommProfile()
+                val vehicleInfo = newSession.tryIdentify()
+                session = newSession
                 _state.value = _state.value.copy(
                     connected = true,
                     vehicleInfo = vehicleInfo,
@@ -656,9 +657,9 @@ class MainViewModel(private val application: Application) : ViewModel() {
                     ?: error("Unknown module $module")
                 activeSession.setTarget(target)
                 // Start default session, then read coding record 0x9B
-                val sessionJob = BmwJobs.byId("start_session_default")!!
+                val sessionJob = BmwJobs.byId("start_session_default") ?: run { _state.update { it.copy(statusMessage = "Job not found: start_session_default") }; return@launch }
                 activeSession.execute(sessionJob)
-                val readJob = BmwJobs.byId("read_coding_9B")!!
+                val readJob = BmwJobs.byId("read_coding_9B") ?: run { _state.update { it.copy(statusMessage = "Job not found: read_coding_9B") }; return@launch }
                 val result = activeSession.execute(readJob)
                 if (result.success) {
                     val ascii = result.decoded.values.firstOrNull { it.length > 3 } ?: ""
@@ -701,7 +702,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                     ?: error("Unknown module ${doc.module}. Set module name in first line of coding text.")
                 activeSession.setTarget(target)
                 // Extended session required for write
-                val extSession = BmwJobs.byId("start_session_extended")!!
+                val extSession = BmwJobs.byId("start_session_extended") ?: run { _state.update { it.copy(statusMessage = "Job not found: start_session_extended") }; return@launch }
                 activeSession.execute(extSession)
                 // Build write payload — ASCII coding record
                 val payload = DatenManager.buildCodingWritePayload(doc)
@@ -763,7 +764,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 val cccTarget = targets().firstOrNull { it.name == BmwTargets.CCC.name }
                     ?: error("CCC not in target list for this vehicle profile")
                 activeSession.setTarget(cccTarget)
-                val job = BmwJobs.byId(jobId)!!
+                val job = BmwJobs.byId(jobId) ?: run { _state.update { it.copy(statusMessage = "Job not found: $jobId") }; return@launch }
                 val result = activeSession.execute(job)
                 val msg = if (result.success)
                     "CCC map slot → $slot OK"
@@ -887,7 +888,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 val casTarget = targets().firstOrNull { it.name == BmwTargets.CAS.name }
                     ?: error("CAS not in target list")
                 activeSession.setTarget(casTarget)
-                val job = BmwJobs.byId("cas_remote_start_sequence")!!
+                val job = BmwJobs.byId("cas_remote_start_sequence") ?: run { _state.update { it.copy(statusMessage = "Job not found: cas_remote_start_sequence") }; return@launch }
                 val result = activeSession.execute(job)
                 val msg = if (result.success) "Start sequence sent OK — ${result.summary}"
                           else "Start FAILED: ${result.summary}"
@@ -923,7 +924,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 val casTarget = targets().firstOrNull { it.name == BmwTargets.CAS.name }
                     ?: error("CAS not in target list")
                 activeSession.setTarget(casTarget)
-                val job = BmwJobs.byId("cas_remote_stop_sequence")!!
+                val job = BmwJobs.byId("cas_remote_stop_sequence") ?: run { _state.update { it.copy(statusMessage = "Job not found: cas_remote_stop_sequence") }; return@launch }
                 val result = activeSession.execute(job)
                 val msg = if (result.success) "Stop sequence sent OK — ${result.summary}"
                           else "Stop FAILED: ${result.summary}"
@@ -963,7 +964,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 val doc = DatenManager.parse(patched)
                 val payload = DatenManager.buildCodingWritePayload(doc)
                 // Extended session + write
-                activeSession.execute(BmwJobs.byId("start_session_extended")!!)
+                activeSession.execute(BmwJobs.byId("start_session_extended") ?: run { _state.update { it.copy(statusMessage = "Job not found: start_session_extended") }; return@launch })
                 val writeJob = BmwJob(
                     id = "suppress_write_${moduleName}",
                     label = "Warning suppress: ${preset.label}",
@@ -1117,3 +1118,4 @@ class MainViewModel(private val application: Application) : ViewModel() {
             }
     }
 }
+
