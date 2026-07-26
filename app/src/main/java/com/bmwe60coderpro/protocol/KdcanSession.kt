@@ -38,8 +38,8 @@ class KdcanSession(
     }
 
     suspend fun tryIdentify(): String {
-        val start = runCatching { execute(BmwJobs.byId("start_session_default")!!) }.getOrNull()
-        val id = runCatching { execute(BmwJobs.byId("ecu_id_9A")!!) }.getOrNull()
+        val start = runCatching { execute(BmwJobs.byId("start_session_default") ?: error("Job not found: start_session_default")) }.getOrNull()
+        val id = runCatching { execute(BmwJobs.byId("ecu_id_9A") ?: error("Job not found: ecu_id_9A")) }.getOrNull()
         return buildString {
             append("Target ${target.name}")
             if (start != null) append(" | Session: ${start.summary}")
