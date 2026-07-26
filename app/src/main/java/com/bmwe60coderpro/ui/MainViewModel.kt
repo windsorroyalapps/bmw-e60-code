@@ -225,7 +225,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 transport = buildTransport(_state.value.profile)
                 val currentTransport = transport
                 if (currentTransport == null) {
-                    _state.update { it.copy(statusMessage = "Transport init failed") }
+                    _state.value = _state.value.copy(statusMessage = "Transport init failed")
                     return@launch
                 }
                 val newSession = KdcanSession(currentTransport, currentTarget(), _state.value.profile.vehicleProfile)
@@ -1088,7 +1088,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
         return targets().firstOrNull { it.name == _state.value.selectedTargetId } ?: BmwTargets.DME
     }
 
-    private suspend fun runBusy(block: suspend () -> Unit) {
+    private inline suspend fun runBusy(block: suspend () -> Unit) {
         try {
             _state.value = _state.value.copy(busy = true)
             block()
@@ -1122,5 +1122,6 @@ class MainViewModel(private val application: Application) : ViewModel() {
             }
     }
 }
+
 
 
