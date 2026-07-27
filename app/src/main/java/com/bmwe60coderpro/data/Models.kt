@@ -201,6 +201,11 @@ data class AppState(
     val controllerLastSummary: String = "—",
     val controllerLog: List<String> = emptyList(),
     val controllerTickHz: String = "—",
+
+    // Connection status popup
+    val showConnectionPopup: Boolean = false,
+    val connectionStatusLines: List<String> = emptyList(),
+    val connectionStep: String = "",
 )
 
 // Appended: Xbox controller bridge state (used by AppState extension)
