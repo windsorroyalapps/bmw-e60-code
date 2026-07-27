@@ -19,6 +19,13 @@
     <!-- Keep screen on during coding -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- Foreground service (required Android 9+) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+    <!-- Notifications for foreground service (required Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Controller/gamepad -->
     <uses-feature android:name="android.hardware.gamepad" android:required="false" />
 
@@ -59,3 +66,4 @@
 
     </application>
 </manifest>
+
