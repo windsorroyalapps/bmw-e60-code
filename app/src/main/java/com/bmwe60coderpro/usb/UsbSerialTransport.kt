@@ -39,7 +39,6 @@ class UsbSerialTransport(
             DeviceInfo(
                 id = "${device.vendorId}:${device.productId}",
                 name = driver?.device?.productName ?: device.deviceName,
-                type = if (hasDriver) "USB_SERIAL" else "USB_UNKNOWN",
             )
         }
     }
@@ -113,10 +112,12 @@ class UsbSerialTransport(
         error("No compatible USB serial device found.\n\nDetected devices:\n$found\n\nYour cable may need a different driver. Common K+DCAN chips: FTDI(0x0403), CH340(0x1A86), CP2102(0x10C4), PL2303(0x067B)")
     }
 
-    override suspend fun disconnect() = withContext(Dispatchers.IO) {
+    override suspend fun disconnect() {
+        withContext(Dispatchers.IO) {
         runCatching { port?.close() }
         port = null
         connected = false
+        }
         Log.d(TAG, "Disconnected")
     }
 
@@ -132,3 +133,4 @@ class UsbSerialTransport(
 
     override fun isConnected(): Boolean = connected && port != null
 }
+
