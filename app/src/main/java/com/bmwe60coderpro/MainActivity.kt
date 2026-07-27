@@ -1,56 +1,46 @@
 package com.bmwe60coderpro
 
+import android.content.Intent
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.os.Bundle
-import android.view.InputDevice
-import android.view.KeyEvent
-import android.view.MotionEvent
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.lifecycle.ViewModelProvider
 import com.bmwe60coderpro.ui.AppRoot
 import com.bmwe60coderpro.ui.MainViewModel
 
+private const val TAG = "MainActivity"
+
 class MainActivity : ComponentActivity() {
 
-    // Hold a direct reference so we can forward input events before Compose inflates
-    private lateinit var vm: MainViewModel
+    private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        vm = ViewModelProvider(this, MainViewModel.factory(application))[MainViewModel::class.java]
-        enableEdgeToEdge()
+        handleUsbIntent(intent)
         setContent {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                AppRoot(vm)
+            AppRoot(viewModel)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        handleUsbIntent(intent)
+    }
+
+    private fun handleUsbIntent(intent: Intent?) {
+        when (intent?.action) {
+            UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
+                val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
+                Log.d(TAG, "USB attached: ${device?.deviceName} VID=${device?.vendorId} PID=${device?.productId}")
+                viewModel.onUsbDeviceAttached(device)
+            }
+            UsbManager.ACTION_USB_DEVICE_DETACHED -> {
+                val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
+                Log.d(TAG, "USB detached: ${device?.deviceName}")
+                viewModel.onUsbDeviceDetached()
             }
         }
-    }
-
-    /**
-     * Forward joystick / gamepad axis events to the ViewModel.
-     * Android routes MotionEvents from wired USB HID gamepads through this method
-     * when the activity has focus and the source is SOURCE_JOYSTICK or SOURCE_GAMEPAD.
-     */
-    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-        if (event.source and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK ||
-            event.source and InputDevice.SOURCE_GAMEPAD  == InputDevice.SOURCE_GAMEPAD) {
-            vm.onControllerMotion(event)
-            return true
-        }
-        return super.dispatchGenericMotionEvent(event)
-    }
-
-    /**
-     * Forward gamepad button key events to the ViewModel.
-     * Wired Xbox controllers send KEYCODE_BUTTON_* events here.
-     */
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.source and InputDevice.SOURCE_GAMEPAD == InputDevice.SOURCE_GAMEPAD) {
-            if (vm.onControllerKey(event)) return true
-        }
-        return super.dispatchKeyEvent(event)
     }
 }
