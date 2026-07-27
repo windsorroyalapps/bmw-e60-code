@@ -604,7 +604,8 @@ class MainViewModel(private val application: Application) : ViewModel() {
 
             // Keep-alive coroutine
             val keepAliveJob = launch {
-                while (isActive) {
+                while (true) {
+                    ensureActive()
                     val s = session
                     if (s != null && _state.value.connected && !_state.value.controllerDryRun) {
                         val ka = ControllerInjector.keepAlive(s, dryRun)
@@ -1190,6 +1191,5 @@ class MainViewModel(private val application: Application) : ViewModel() {
             }
     }
 }
-
 
 
