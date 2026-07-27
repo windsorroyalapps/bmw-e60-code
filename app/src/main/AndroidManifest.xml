@@ -4,7 +4,6 @@
 
     <!-- USB OBD2 -->
     <uses-feature android:name="android.hardware.usb.host" android:required="true" />
-    <uses-permission android:name="android.permission.USB_PERMISSION" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
@@ -66,4 +65,5 @@
 
     </application>
 </manifest>
+
 
