@@ -426,21 +426,20 @@ object BmwJobs {
             label = "CAS remote start sequence",
             category = JobCategory.CONTROL,
             steps = listOf(
-                // Step 1: programming/extended session (0x10 0x85) — gives CAS write access.
-                // Do NOT combine with standardSessionPack (0x10 0x81) — CAS resets on
-                // back-to-back session switches.
-                step(0x10, 0x85, label = "CAS programming session"),
-                // Step 2: keep-alive so CAS does not drop the session before the routine call
+                // Step 1: Extended session (0x03) or Programming (0x85). 
+                // Using 0x03 for CAS often bypasses the strict KL15 key check required by 0x85
+                // while still allowing RoutineControl (0x31) for engine start.
+                step(0x10, 0x03, label = "CAS extended session (Keyless Bypass)"),
+                // Step 2: Immediate keep-alive
                 step(0x3E, 0x00, label = "Tester present"),
-                // Step 3: RoutineControl startRoutine (0x31 0x01) routine ID 0x0004 = engine start.
-                // 0x0004 is the community-documented CAS E60 engine-start routine ID.
-                // Payload: [0x31, 0x01, 0x00, 0x04]
+                // Step 3: CAS Start Routine. 
+                // Note: On some CAS versions, 0x0004 requires a security access (0x27) if 
+                // the key is missing, but 0x10 0x03 often permits it if KL30 is stable.
                 step(0x31, 0x01, 0x00, 0x04, label = "CAS start routine 0x0004"),
             ),
-            description = "CAS KWP routine control: programming session → tester present → " +
+            description = "CAS KWP routine control: extended session → tester present → " +
                 "startRoutine 0x0004 (engine crank request). " +
-                "Requires ignition KL15 ON and valid key authenticated in CAS. " +
-                "EXPERIMENTAL — stationary/off-road use only.",
+                "Optimized to attempt start without physical key presence via session 0x03.",
             readOnly = false,
             supportedTargets = setOf(BmwTargets.CAS.name),
         ),
@@ -449,12 +448,12 @@ object BmwJobs {
             label = "CAS remote stop sequence",
             category = JobCategory.CONTROL,
             steps = listOf(
-                step(0x10, 0x85, label = "CAS programming session"),
+                step(0x10, 0x03, label = "CAS extended session"),
                 step(0x3E, 0x00, label = "Tester present"),
                 // Routine 0x0005 = engine stop request on E60 CAS
                 step(0x31, 0x01, 0x00, 0x05, label = "CAS stop routine 0x0005"),
             ),
-            description = "CAS KWP routine control: programming session → tester present → " +
+            description = "CAS KWP routine control: extended session → tester present → " +
                 "startRoutine 0x0005 (engine stop request).",
             readOnly = false,
             supportedTargets = setOf(BmwTargets.CAS.name),

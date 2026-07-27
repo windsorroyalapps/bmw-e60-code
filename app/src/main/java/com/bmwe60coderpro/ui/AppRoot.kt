@@ -669,28 +669,6 @@ private fun ExperimentalScreen(state: AppState, vm: MainViewModel) {
 
                 Divider()
 
-                // ── Injection mode ─────────────────────────────────────────
-                Text("Injection mode", style = MaterialTheme.typography.labelMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = state.controllerDryRun,
-                            onClick = { vm.setControllerDryRun(true) },
-                            enabled = !isRunning,
-                        )
-                        Text("Dry run")
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = !state.controllerDryRun,
-                            onClick = { vm.setControllerDryRun(false) },
-                            enabled = !isRunning,
-                        )
-                        Text("Live inject")
-                    }
-                }
-
                 // ── Channel toggles ────────────────────────────────────────
                 Text("Active channels", style = MaterialTheme.typography.labelMedium)
                 Row(
@@ -820,7 +798,7 @@ private fun ExperimentalScreen(state: AppState, vm: MainViewModel) {
                 Text("Remote start / stop", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "Sends CAS KWP routine 0x31 (startRoutine 0x0004/0x0005) for engine crank/stop. " +
-                    "Requires ignition KL15 ON and valid key in CAS. EXPERIMENTAL — stationary only.",
+                    "Uses Session 0x03 keyless bypass. EXPERIMENTAL — stationary only.",
                     style = MaterialTheme.typography.bodySmall,
                 )
 

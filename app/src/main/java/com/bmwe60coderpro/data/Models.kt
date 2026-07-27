@@ -190,7 +190,6 @@ data class AppState(
     val controllerConnected: Boolean = false,
     val controllerName: String = "No controller detected",
     val controllerArmed: Boolean = false,
-    val controllerDryRun: Boolean = false,
     val controllerSendThrottle: Boolean = true,
     val controllerSendSteering: Boolean = false,
     val controllerSendBrake: Boolean = false,

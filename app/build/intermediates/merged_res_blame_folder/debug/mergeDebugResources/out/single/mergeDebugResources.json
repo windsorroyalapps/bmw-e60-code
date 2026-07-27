@@ -1,0 +1,50 @@
+[
+    {
+        "merged": "com.bmwe60coderpro.app-debug-65:/mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "com.bmwe60coderpro.app-main-67:/mipmap-xxxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.bmwe60coderpro.app-debug-65:/mipmap-hdpi_ic_launcher_round.png.flat",
+        "source": "com.bmwe60coderpro.app-main-67:/mipmap-hdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.bmwe60coderpro.app-debug-65:/xml_backup_rules.xml.flat",
+        "source": "com.bmwe60coderpro.app-main-67:/xml/backup_rules.xml"
+    },
+    {
+        "merged": "com.bmwe60coderpro.app-debug-65:/mipmap-mdpi_ic_launcher_round.png.flat",
+        "source": "com.bmwe60coderpro.app-main-67:/mipmap-mdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.bmwe60coderpro.app-debug-65:/mipmap-xxhdpi_ic_launcher_round.png.flat",
+        "source": "com.bmwe60coderpro.app-main-67:/mipmap-xxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.bmwe60coderpro.app-debug-65:/mipmap-xxxhdpi_ic_launcher_round.png.flat",
+        "source": "com.bmwe60coderpro.app-main-67:/mipmap-xxxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.bmwe60coderpro.app-debug-65:/mipmap-xhdpi_ic_launcher_round.png.flat",
+        "source": "com.bmwe60coderpro.app-main-67:/mipmap-xhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "com.bmwe60coderpro.app-debug-65:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "com.bmwe60coderpro.app-main-67:/mipmap-hdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.bmwe60coderpro.app-debug-65:/mipmap-mdpi_ic_launcher.png.flat",
+        "source": "com.bmwe60coderpro.app-main-67:/mipmap-mdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.bmwe60coderpro.app-debug-65:/xml_device_filter.xml.flat",
+        "source": "com.bmwe60coderpro.app-main-67:/xml/device_filter.xml"
+    },
+    {
+        "merged": "com.bmwe60coderpro.app-debug-65:/mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "com.bmwe60coderpro.app-main-67:/mipmap-xhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.bmwe60coderpro.app-debug-65:/mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "com.bmwe60coderpro.app-main-67:/mipmap-xxhdpi/ic_launcher.png"
+    }
+]

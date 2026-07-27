@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.bmwe60coderpro.app-mergeDebugResources-63:/values-v16/values-v16.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\troyb\\.gradle\\caches\\transforms-4\\5eece090055e083df30114ed9a46e7f4\\transformed\\appcompat-1.6.1\\res\\values-v16\\values-v16.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "5",
+                        "endColumns": "12",
+                        "endOffsets": "223"
+                    }
+                }
+            ]
+        }
+    ]
+}

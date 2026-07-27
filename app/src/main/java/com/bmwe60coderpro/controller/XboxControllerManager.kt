@@ -62,15 +62,25 @@ data class ControllerAxes(
     val throttleNorm: Float = 0f,
     /** 0.0 = released, 1.0 = fully pressed */
     val brakeNorm: Float = 0f,
+    /** Right stick X (-1.0 left ... +1.0 right) */
+    val rightStickX: Float = 0f,
+    /** Right stick Y (-1.0 up ... +1.0 down) */
+    val rightStickY: Float = 0f,
+    /** D-Pad: -1 (Left/Down), 0 (None), 1 (Right/Up) */
+    val dpadX: Int = 0,
+    val dpadY: Int = 0
 )
 
 data class ControllerButtons(
     val armToggle: Boolean = false, // A button
     val emergencyStop: Boolean = false, // B button
-    val paddelUp: Boolean = false, // RB
+    val paddleUp: Boolean = false, // RB
     val paddleDown: Boolean = false, // LB
+    val xButton: Boolean = false, // X
+    val yButton: Boolean = false, // Y
     val sportOn: Boolean = false, // START
     val sportOff: Boolean = false, // BACK
+    val horn: Boolean = false, // Right Stick Click
 )
 
 /** Decoded injection payloads ready to hand to MflInjector / KdcanSession. */
@@ -81,6 +91,8 @@ data class ControllerVehicleCommands(
     val steeringPayload: List<Int>,
     /** KWP 0x30 payload for DSC brake hint */
     val brakePayload: List<Int>,
+    /** KWP 0x30 payloads for additional modules (targetAddress to payload) */
+    val extraPayloads: Map<Int, List<Int>> = emptyMap(),
     /** True if any payload should actually be sent this tick */
     val hasActiveCommands: Boolean,
     /** Human summary for the UI log */
@@ -93,25 +105,41 @@ object XboxControllerManager {
     private const val AXIS_STEERING = MotionEvent.AXIS_X
     private const val AXIS_THROTTLE = MotionEvent.AXIS_RTRIGGER
     private const val AXIS_BRAKE = MotionEvent.AXIS_LTRIGGER
+    private const val AXIS_DPAD_X = MotionEvent.AXIS_HAT_X
+    private const val AXIS_DPAD_Y = MotionEvent.AXIS_HAT_Y
+    private const val AXIS_RSTICK_X = MotionEvent.AXIS_Z
+    private const val AXIS_RSTICK_Y = MotionEvent.AXIS_RZ
 
     // ── KWP local IDs (community-derived for E60 DME/DSC 0x30 control) ───────
     const val DME_LOCAL_ID_THROTTLE = 0xA2
     const val DSC_LOCAL_ID_STEERING = 0xA1
     const val DSC_LOCAL_ID_BRAKE = 0xA3
+    const val KOMBI_LOCAL_ID_CAN_SIM = 0xA0
+
+    /** KWP local IDs for iDrive / Menu simulation on CCC/CIC */
+    const val CCC_LOCAL_ID_JOYSTICK = 0x60
+    const val CCC_LOCAL_ID_BUTTONS = 0x61
 
     /**
      * Parse raw MotionEvent axes into normalised [ControllerAxes].
-     * Call from Activity.dispatchGenericMotionEvent when source is JOYSTICK or GAMEPAD.
      */
     fun parseAxes(event: MotionEvent): ControllerAxes {
         val rawSteering = event.getAxisValue(AXIS_STEERING)
         val rawThrottle = event.getAxisValue(AXIS_THROTTLE)
         val rawBrake = event.getAxisValue(AXIS_BRAKE)
+        val rawDpadX = event.getAxisValue(AXIS_DPAD_X)
+        val rawDpadY = event.getAxisValue(AXIS_DPAD_Y)
+        val rawRStickX = event.getAxisValue(AXIS_RSTICK_X)
+        val rawRStickY = event.getAxisValue(AXIS_RSTICK_Y)
 
         return ControllerAxes(
             steeringNorm = applyDeadzone(rawSteering),
             throttleNorm = rawThrottle.coerceIn(0f, 1f),
             brakeNorm = rawBrake.coerceIn(0f, 1f),
+            rightStickX = applyDeadzone(rawRStickX),
+            rightStickY = applyDeadzone(rawRStickY),
+            dpadX = rawDpadX.roundToInt(),
+            dpadY = rawDpadY.roundToInt()
         )
     }
 
@@ -130,6 +158,7 @@ object XboxControllerManager {
      */
     fun buildCommands(
         axes: ControllerAxes,
+        buttons: ControllerButtons = ControllerButtons(),
         throttleCeiling: Float = DEFAULT_THROTTLE_CEILING,
         armed: Boolean = false,
     ): ControllerVehicleCommands {
@@ -141,17 +170,50 @@ object XboxControllerManager {
 
         val brakeByte = (axes.brakeNorm * 255f).roundToInt().coerceIn(0, 255)
 
+        // Extra payloads (e.g., MFL simulation via KOMBI)
+        val extras = mutableMapOf<Int, List<Int>>()
+        
+        // Map D-pad to indicator/horn simulation via KOMBI (0x80)
+        // Note: address 0x80 is KOMBI, local ID 0xA0 is MFL
+        if (axes.dpadX != 0) {
+            val indicatorCode = if (axes.dpadX < 0) 0x09 else 0x0A // Hypothetical codes for L/R
+            extras[0x80] = listOf(KOMBI_LOCAL_ID_CAN_SIM, 0x03, indicatorCode)
+        } else if (axes.dpadY > 0) {
+            // D-Pad Down -> Horn
+            extras[0x80] = listOf(KOMBI_LOCAL_ID_CAN_SIM, 0x03, 0x0B) // Hypothetical horn code
+        }
+
+        // Map Right Stick to iDrive/Menu navigation via CCC (0x68)
+        if (abs(axes.rightStickX) > 0.1f || abs(axes.rightStickY) > 0.1f) {
+            val xByte = ((axes.rightStickX * 127f) + 127f).roundToInt().coerceIn(0, 255)
+            val yByte = ((axes.rightStickY * 127f) + 127f).roundToInt().coerceIn(0, 255)
+            extras[0x68] = listOf(CCC_LOCAL_ID_JOYSTICK, 0x03, xByte, yByte)
+        }
+        
+        // Right stick click -> Horn (alternate)
+        if (buttons.horn) {
+            extras[0x80] = listOf(KOMBI_LOCAL_ID_CAN_SIM, 0x03, 0x0B)
+        }
+
         // KWP 0x30 payload: [localId, controlOption=0x03, valueByte]
         val throttlePayload = listOf(DME_LOCAL_ID_THROTTLE, 0x03, throttleByte)
         val steeringPayload = listOf(DSC_LOCAL_ID_STEERING, 0x03, steeringByte)
         val brakePayload = listOf(DSC_LOCAL_ID_BRAKE, 0x03, brakeByte)
 
-        val hasActive = armed && (throttleByte > 0 || brakeByte > 0 || steeringByte != 127)
+        val hasActive = armed && (throttleByte > 0 || brakeByte > 0 || steeringByte != 127 || extras.isNotEmpty())
 
         val summary = buildString {
             append("STR %+.2f (%3d)".format(axes.steeringNorm, steeringByte))
             append(" THR %.2f (%3d)".format(cappedThrottle, throttleByte))
             append(" BRK %.2f (%3d)".format(axes.brakeNorm, brakeByte))
+            if (axes.dpadX != 0) append(if (axes.dpadX < 0) " [L_IND]" else " [R_IND]")
+            if (axes.dpadY > 0) append(" [HORN]")
+            if (abs(axes.rightStickX) > 0.1f || abs(axes.rightStickY) > 0.1f) {
+                append(" IDRV(%d,%d)".format(
+                    ((axes.rightStickX * 127f) + 127f).toInt(),
+                    ((axes.rightStickY * 127f) + 127f).toInt()
+                ))
+            }
             if (!armed) append(" [DISARMED]")
         }
 
@@ -159,6 +221,7 @@ object XboxControllerManager {
             throttlePayload = throttlePayload,
             steeringPayload = steeringPayload,
             brakePayload = brakePayload,
+            extraPayloads = extras,
             hasActiveCommands = hasActive,
             summary = summary,
         )

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bmw_black">#000000</color>
+    <color name="bmw_blue">#0066B1</color>
+    <color name="bmw_dark_blue">#003D6B</color>
+    <color name="bmw_gray">#666666</color>
+    <color name="bmw_green">#00AA00</color>
+    <color name="bmw_light_gray">#CCCCCC</color>
+    <color name="bmw_orange">#FF8800</color>
+    <color name="bmw_red">#CC0000</color>
+    <color name="bmw_white">#FFFFFF</color>
+    <color name="status_busy">#FF8800</color>
+    <color name="status_connected">#00AA00</color>
+    <color name="status_disconnected">#CC0000</color>
+    <string name="app_name">BMW E60 Coder Pro</string>
+    <style name="Theme.BMWE60CoderPro" parent="Theme.Material3.DayNight.NoActionBar"/>
+</resources>

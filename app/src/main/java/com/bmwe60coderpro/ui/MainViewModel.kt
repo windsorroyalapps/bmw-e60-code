@@ -81,6 +81,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
     private var controllerJob: Job? = null
     // Latest axes from MotionEvent — written from Activity thread, read by coroutine
     @Volatile private var latestAxes = com.bmwe60coderpro.controller.ControllerAxes()
+    @Volatile private var latestButtons = com.bmwe60coderpro.controller.ControllerButtons()
     @Volatile private var controllerTickCount = 0L
     @Volatile private var controllerLastTickMs = 0L
 
@@ -536,21 +537,53 @@ class MainViewModel(private val application: Application) : ViewModel() {
     /** Called by MainActivity.dispatchKeyEvent for gamepad button events. */
     fun onControllerKey(event: KeyEvent): Boolean {
         val isDown = event.action == KeyEvent.ACTION_DOWN
+
+        // Update latestButtons state
         when (event.keyCode) {
-            KeyEvent.KEYCODE_BUTTON_A     -> if (isDown) toggleControllerArmed()
-            KeyEvent.KEYCODE_BUTTON_B     -> if (isDown) triggerEmergencyStop()
+            KeyEvent.KEYCODE_BUTTON_THUMBR -> latestButtons = latestButtons.copy(horn = isDown)
+            KeyEvent.KEYCODE_BUTTON_A -> {
+                if (isDown) toggleControllerArmed()
+                latestButtons = latestButtons.copy(armToggle = isDown)
+            }
+            KeyEvent.KEYCODE_BUTTON_B -> {
+                if (isDown) triggerEmergencyStop()
+                latestButtons = latestButtons.copy(emergencyStop = isDown)
+            }
+            KeyEvent.KEYCODE_BUTTON_R1 -> latestButtons = latestButtons.copy(paddleUp = isDown)
+            KeyEvent.KEYCODE_BUTTON_L1 -> latestButtons = latestButtons.copy(paddleDown = isDown)
+            KeyEvent.KEYCODE_BUTTON_X -> latestButtons = latestButtons.copy(xButton = isDown)
+            KeyEvent.KEYCODE_BUTTON_Y -> latestButtons = latestButtons.copy(yButton = isDown)
+            KeyEvent.KEYCODE_BUTTON_START -> latestButtons = latestButtons.copy(sportOn = isDown)
+            KeyEvent.KEYCODE_BUTTON_SELECT, KeyEvent.KEYCODE_BUTTON_MODE ->
+                latestButtons = latestButtons.copy(sportOff = isDown)
+        }
+
+        when (event.keyCode) {
             KeyEvent.KEYCODE_BUTTON_R1    -> if (isDown) sendPaddleEvent(up = true)
             KeyEvent.KEYCODE_BUTTON_L1    -> if (isDown) sendPaddleEvent(up = false)
             KeyEvent.KEYCODE_BUTTON_START -> if (isDown) log("CTRL", "Sport mode on (hint)")
             KeyEvent.KEYCODE_BUTTON_SELECT, KeyEvent.KEYCODE_BUTTON_MODE ->
                 if (isDown) log("CTRL", "Sport mode off (hint)")
-            else -> return false
+            else -> {}
         }
-        return true
+
+        // Return true for all handled button events to prevent system-wide navigation
+        val handledCodes = setOf(
+            KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_BUTTON_B,
+            KeyEvent.KEYCODE_BUTTON_X, KeyEvent.KEYCODE_BUTTON_Y,
+            KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_BUTTON_R1,
+            KeyEvent.KEYCODE_BUTTON_START, KeyEvent.KEYCODE_BUTTON_SELECT,
+            KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.KEYCODE_BUTTON_THUMBR
+        )
+        return event.keyCode in handledCodes
     }
 
-    fun setControllerDryRun(dryRun: Boolean) {
-        _state.value = _state.value.copy(controllerDryRun = dryRun)
+    fun toggleControllerBridge() {
+        if (controllerJob?.isActive == true) {
+            stopControllerBridge()
+        } else {
+            startControllerBridge()
+        }
     }
 
     fun setControllerSendThrottle(v: Boolean) {
@@ -617,8 +650,10 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 while (true) {
                     val st = _state.value
                     val axes = latestAxes
+                    val buttons = latestButtons
                     val commands = XboxControllerManager.buildCommands(
                         axes             = axes,
+                        buttons          = buttons,
                         throttleCeiling  = st.controllerThrottleCeiling,
                         armed            = st.controllerArmed,
                     )
@@ -960,8 +995,9 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 val casAddr = BmwTargets.CAS.targetAddress
 
                 val result = if (isLocal) {
-                    // LOCAL K+DCAN: use sendRawFrame so we never switch the main session target
-                    val r1 = runCatching { activeSession.sendRawFrame(casAddr, 0x10, listOf(0x85)) }.getOrDefault("ERR")
+                    // LOCAL K+DCAN: use sendRawFrame so we never switch the main session target.
+                    // Using 0x03 (Extended Session) to attempt bypass of key requirement.
+                    val r1 = runCatching { activeSession.sendRawFrame(casAddr, 0x10, listOf(0x03)) }.getOrDefault("ERR")
                     val r2 = runCatching { activeSession.sendRawFrame(casAddr, 0x3E, listOf(0x00)) }.getOrDefault("ERR")
                     val r3 = runCatching { activeSession.sendRawFrame(casAddr, 0x31, listOf(0x01, 0x00, 0x04)) }.getOrDefault("ERR")
                     val ok = r3.contains("71") || r3.contains("51") || r3.isNotEmpty()
@@ -1013,7 +1049,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 val casAddr = BmwTargets.CAS.targetAddress
 
                 val result = if (isLocal) {
-                    val r1 = runCatching { activeSession.sendRawFrame(casAddr, 0x10, listOf(0x85)) }.getOrDefault("ERR")
+                    val r1 = runCatching { activeSession.sendRawFrame(casAddr, 0x10, listOf(0x03)) }.getOrDefault("ERR")
                     val r2 = runCatching { activeSession.sendRawFrame(casAddr, 0x3E, listOf(0x00)) }.getOrDefault("ERR")
                     val r3 = runCatching { activeSession.sendRawFrame(casAddr, 0x31, listOf(0x01, 0x00, 0x05)) }.getOrDefault("ERR")
                     val ok = r3.contains("71") || r3.contains("51") || r3.isNotEmpty()

@@ -2,7 +2,6 @@ package com.bmwe60coderpro.controller
 
 import com.bmwe60coderpro.protocol.BmwTargets
 import com.bmwe60coderpro.protocol.KdcanSession
-import kotlinx.coroutines.delay
 
 /**
  * Xbox wired USB controller → BMW E60 vehicle bus injection.
@@ -27,64 +26,82 @@ object ControllerInjector {
     data class SessionState(
         val dmeSessionActive: Boolean = false,
         val dscSessionActive: Boolean = false,
-        val lastDmeKeepAlive: Long = 0L,
-        val lastDscKeepAlive: Long = 0L,
+        val activeTargetSessions: Set<Int> = emptySet(),
+        val lastKeepAlive: Map<Int, Long> = emptyMap()
     )
 
     private var sessionState = SessionState()
 
-    /** Start extended diagnostic sessions (0x10 0x03) on DME and DSC. */
+    /** Start extended diagnostic sessions (0x10 0x03) on target modules. */
     suspend fun initSessions(session: KdcanSession): String {
-        val dmeResult = runCatching {
-            session.sendRawFrame(BmwTargets.DME.targetAddress, 0x10, listOf(0x03))
-        }.getOrDefault("")
-        val dmeOk = dmeResult.contains("50 03") || dmeResult.contains("50")
+        val targets = listOf(BmwTargets.DME, BmwTargets.DSC, BmwTargets.KOMBI, BmwTargets.CCC)
+        val activeSessions = mutableSetOf<Int>()
+        val keepAlives = mutableMapOf<Int, Long>()
+        val resultsSummary = mutableMapOf<String, Boolean>()
 
-        val dscResult = runCatching {
-            session.sendRawFrame(BmwTargets.DSC.targetAddress, 0x10, listOf(0x03))
-        }.getOrDefault("")
-        val dscOk = dscResult.contains("50 03") || dscResult.contains("50")
+        // ── Wake up attempt ──
+        // Send a broadcast TesterPresent or a dummy frame to CAS to wake the bus if KL15 is off.
+        runCatching { session.sendRawFrame(0x40, 0x3E, listOf(0x80)) }
+        kotlinx.coroutines.delay(200)
+
+        targets.forEach { target ->
+            // Clear any existing session with 0x10 0x01 then jump to 0x10 0x03
+            runCatching { session.sendRawFrame(target.targetAddress, 0x10, listOf(0x01)) }
+            kotlinx.coroutines.delay(50)
+
+            val result = runCatching {
+                session.sendRawFrame(target.targetAddress, 0x10, listOf(0x03))
+            }.getOrDefault("")
+
+            // Optional: Request security seed (0x27 0x01) to keep the module in a permissive state
+            if (target.targetAddress == BmwTargets.DME.targetAddress || target.targetAddress == BmwTargets.CAS.targetAddress) {
+                runCatching { session.sendRawFrame(target.targetAddress, 0x27, listOf(0x01)) }
+            }
+
+            val ok = result.contains("50 03") || result.contains("50")
+            if (ok) {
+                activeSessions.add(target.targetAddress)
+                keepAlives[target.targetAddress] = System.currentTimeMillis()
+            }
+            resultsSummary[target.name] = ok
+        }
 
         sessionState = SessionState(
-            dmeSessionActive = dmeOk,
-            dscSessionActive = dscOk,
-            lastDmeKeepAlive = System.currentTimeMillis(),
-            lastDscKeepAlive = System.currentTimeMillis(),
+            dmeSessionActive = resultsSummary[BmwTargets.DME.name] ?: false,
+            dscSessionActive = resultsSummary[BmwTargets.DSC.name] ?: false,
+            activeTargetSessions = activeSessions,
+            lastKeepAlive = keepAlives
         )
 
         return buildString {
-            append("DME session: ")
-            append(if (dmeOk) "OK" else "FAIL ($dmeResult)")
-            append(" | DSC session: ")
-            append(if (dscOk) "OK" else "FAIL ($dscResult)")
+            append("Sessions: ")
+            resultsSummary.forEach { (name, ok) ->
+                append("$name:${if (ok) "OK" else "FAIL"} ")
+            }
         }
     }
 
     /** Send tester present (0x3E) to keep sessions alive. Call every ~2 s. */
     suspend fun keepAlive(session: KdcanSession): String {
         val now = System.currentTimeMillis()
-        var dmeResult = ""
-        var dscResult = ""
+        val results = mutableListOf<String>()
+        val updatedKeepAlives = sessionState.lastKeepAlive.toMutableMap()
 
-        if (sessionState.dmeSessionActive && now - sessionState.lastDmeKeepAlive > 2000) {
-            dmeResult = runCatching {
-                session.sendRawFrame(BmwTargets.DME.targetAddress, 0x3E, listOf(0x00))
-            }.getOrDefault("")
-            sessionState = sessionState.copy(lastDmeKeepAlive = now)
+        sessionState.activeTargetSessions.forEach { addr ->
+            val last = sessionState.lastKeepAlive[addr] ?: 0L
+            if (now - last > 2000) {
+                val r = runCatching {
+                    session.sendRawFrame(addr, 0x3E, listOf(0x00))
+                }.getOrDefault("ERR")
+                updatedKeepAlives[addr] = now
+                if (r.isNotEmpty()) results.add("0x%02X: $r".format(addr))
+            }
         }
 
-        if (sessionState.dscSessionActive && now - sessionState.lastDscKeepAlive > 2000) {
-            dscResult = runCatching {
-                session.sendRawFrame(BmwTargets.DSC.targetAddress, 0x3E, listOf(0x00))
-            }.getOrDefault("")
-            sessionState = sessionState.copy(lastDscKeepAlive = now)
-        }
+        sessionState = sessionState.copy(lastKeepAlive = updatedKeepAlives)
 
-        return buildString {
-            if (dmeResult.isNotEmpty()) append("DME 0x3E: $dmeResult ")
-            if (dscResult.isNotEmpty()) append("DSC 0x3E: $dscResult")
-            if (isEmpty()) append("No keep-alive needed")
-        }
+        return if (results.isEmpty()) "No keep-alive needed"
+        else "Keep-alive: ${results.joinToString(", ")}"
     }
 
     /** Send one controller tick to the vehicle. */
@@ -118,6 +135,11 @@ object ControllerInjector {
             val r = sendControl(session, BmwTargets.DSC.targetAddress, commands.brakePayload)
             brakeHex = r.first
             bOk = r.second
+        }
+
+        // Send extra payloads (e.g. indicators, horn simulation)
+        commands.extraPayloads.forEach { (targetAddr, payload) ->
+            sendControl(session, targetAddr, payload)
         }
 
         val summary = buildString {
