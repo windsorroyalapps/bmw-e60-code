@@ -50,7 +50,7 @@ jobs:
           path: stubs-report.json
       - name: Commit stub fixes
         if: steps.scan.outputs.stubs_found != '0'
-        continue-on-error: true
+        
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -74,7 +74,7 @@ jobs:
 
       - name: Build Release APK (Attempt 1)
         id: build1
-        continue-on-error: true
+      
         env:
           KEYSTORE_PATH: /tmp/release.keystore
           KEY_ALIAS: ${{ secrets.ALIAS }}
@@ -88,7 +88,7 @@ jobs:
       - name: Build Release APK (Attempt 2)
         id: build2
         if: steps.build1.outcome == 'failure' && inputs.fix_mode == true
-        continue-on-error: true
+        
         env:
           KEYSTORE_PATH: /tmp/release.keystore
           KEY_ALIAS: ${{ secrets.ALIAS }}
