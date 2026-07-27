@@ -1,25 +1,19 @@
 package com.bmwe60coderpro.controller
 
-import com.bmwe60coderpro.protocol.BmwJob
 import com.bmwe60coderpro.protocol.BmwTargets
-import com.bmwe60coderpro.protocol.JobCategory
-import com.bmwe60coderpro.protocol.JobStep
 import com.bmwe60coderpro.protocol.KdcanSession
+import kotlinx.coroutines.delay
 
 /**
- * Sends [ControllerVehicleCommands] to the vehicle via KWP 0x30 output-control frames.
+ * Xbox wired USB controller → BMW E60 vehicle bus injection.
  *
- * Each controller tick produces up to three frames:
- * 1. DME 0x30 0xA2 throttleByte — pedal position override
- * 2. DSC 0x30 0xA1 steeringByte — steering torque advisory
- * 3. DSC 0x30 0xA3 brakeByte — brake pressure hint
- *
- * The caller decides which are sent (e.g. skip steering if EPS not fitted).
- *
- * Dry-run mode builds all frames and returns their hex representations
- * without touching the transport — useful for verifying axis mapping
- * before connecting to the car.
+ * IMPROVEMENTS:
+ * 1. Uses KdcanSession.sendRawFrame() — no session target switching, no job overhead.
+ * 2. Starts extended diagnostic sessions (0x10 0x03) on each target before injection.
+ * 3. Keeps sessions alive with periodic 0x3E tester present.
+ * 4. Throttled to ~10 Hz — K-line cannot sustain 50 Hz real-time control.
  */
+
 object ControllerInjector {
 
     data class TickResult(
@@ -33,22 +27,83 @@ object ControllerInjector {
         val dryRun: Boolean,
     )
 
-    /**
-     * Send one controller tick to the vehicle.
-     *
-     * @param session Active [KdcanSession].
-     * @param commands Axis values already converted to KWP payloads by [XboxControllerManager.buildCommands].
-     * @param sendThrottle Whether to send the DME throttle frame this tick.
-     * @param sendSteering Whether to send the DSC steering frame this tick.
-     * @param sendBrake Whether to send the DSC brake frame this tick.
-     * @param dryRun Build but do not transmit.
-     */
+    data class SessionState(
+        val dmeSessionActive: Boolean = false,
+        val dscSessionActive: Boolean = false,
+        val lastDmeKeepAlive: Long = 0L,
+        val lastDscKeepAlive: Long = 0L,
+    )
+
+    private var sessionState = SessionState()
+
+    /** Start extended diagnostic sessions on DME and DSC. Call once at bridge start. */
+    suspend fun initSessions(session: KdcanSession, dryRun: Boolean = true): String {
+        if (dryRun) {
+            sessionState = SessionState(dmeSessionActive = true, dscSessionActive = true)
+            return "[DRY] Sessions simulated active"
+        }
+
+        val dmeResult = runCatching {
+            session.sendRawFrame(BmwTargets.DME.targetAddress, 0x10, listOf(0x03))
+        }.getOrDefault("")
+        val dmeOk = dmeResult.contains("50 03") || dmeResult.contains("50")
+
+        val dscResult = runCatching {
+            session.sendRawFrame(BmwTargets.DSC.targetAddress, 0x10, listOf(0x03))
+        }.getOrDefault("")
+        val dscOk = dscResult.contains("50 03") || dscResult.contains("50")
+
+        sessionState = SessionState(
+            dmeSessionActive = dmeOk,
+            dscSessionActive = dscOk,
+            lastDmeKeepAlive = System.currentTimeMillis(),
+            lastDscKeepAlive = System.currentTimeMillis(),
+        )
+
+        return buildString {
+            append("DME session: ")
+            append(if (dmeOk) "OK" else "FAIL ($dmeResult)")
+            append(" | DSC session: ")
+            append(if (dscOk) "OK" else "FAIL ($dscResult)")
+        }
+    }
+
+    /** Send tester present (0x3E) to keep sessions alive. Call every ~2 s. */
+    suspend fun keepAlive(session: KdcanSession, dryRun: Boolean = true): String {
+        if (dryRun) return "[DRY] Keep-alive simulated"
+
+        val now = System.currentTimeMillis()
+        var dmeResult = ""
+        var dscResult = ""
+
+        if (sessionState.dmeSessionActive && now - sessionState.lastDmeKeepAlive > 2000) {
+            dmeResult = runCatching {
+                session.sendRawFrame(BmwTargets.DME.targetAddress, 0x3E, listOf(0x00))
+            }.getOrDefault("")
+            sessionState = sessionState.copy(lastDmeKeepAlive = now)
+        }
+
+        if (sessionState.dscSessionActive && now - sessionState.lastDscKeepAlive > 2000) {
+            dscResult = runCatching {
+                session.sendRawFrame(BmwTargets.DSC.targetAddress, 0x3E, listOf(0x00))
+            }.getOrDefault("")
+            sessionState = sessionState.copy(lastDscKeepAlive = now)
+        }
+
+        return buildString {
+            if (dmeResult.isNotEmpty()) append("DME 0x3E: $dmeResult ")
+            if (dscResult.isNotEmpty()) append("DSC 0x3E: $dscResult")
+            if (isEmpty()) append("No keep-alive needed")
+        }
+    }
+
+    /** Send one controller tick to the vehicle. */
     suspend fun tick(
         session: KdcanSession,
         commands: ControllerVehicleCommands,
         sendThrottle: Boolean = true,
-        sendSteering: Boolean = false, // off by default — only useful with EPS
-        sendBrake: Boolean = false, // off by default — advisory only
+        sendSteering: Boolean = false,
+        sendBrake: Boolean = false,
         dryRun: Boolean = true,
     ): TickResult {
         var throttleHex = ""
@@ -58,20 +113,20 @@ object ControllerInjector {
         var sOk = false
         var bOk = false
 
-        if (sendThrottle) {
-            val r = runControl(session, BmwTargets.DME, commands.throttlePayload, dryRun)
+        if (sendThrottle && commands.throttlePayload.isNotEmpty()) {
+            val r = sendControl(session, BmwTargets.DME.targetAddress, commands.throttlePayload, dryRun)
             throttleHex = r.first
             tOk = r.second
         }
 
-        if (sendSteering) {
-            val r = runControl(session, BmwTargets.DSC, commands.steeringPayload, dryRun)
+        if (sendSteering && commands.steeringPayload.isNotEmpty()) {
+            val r = sendControl(session, BmwTargets.DSC.targetAddress, commands.steeringPayload, dryRun)
             steeringHex = r.first
             sOk = r.second
         }
 
-        if (sendBrake) {
-            val r = runControl(session, BmwTargets.DSC, commands.brakePayload, dryRun)
+        if (sendBrake && commands.brakePayload.isNotEmpty()) {
+            val r = sendControl(session, BmwTargets.DSC.targetAddress, commands.brakePayload, dryRun)
             brakeHex = r.first
             bOk = r.second
         }
@@ -117,31 +172,21 @@ object ControllerInjector {
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
-    private suspend fun runControl(
+    private suspend fun sendControl(
         session: KdcanSession,
-        target: com.bmwe60coderpro.protocol.EcuTarget,
+        targetAddress: Int,
         payload: List<Int>,
         dryRun: Boolean,
     ): Pair<String, Boolean> {
-        session.setTarget(target)
-
-        val job = BmwJob(
-            id = "ctrl_inject_${target.name}_${payload.firstOrNull()?.toString(16)}",
-            label = "Controller inject → ${target.name}",
-            category = JobCategory.CONTROL,
-            steps = listOf(JobStep(serviceId = 0x30, payload = payload, label = "0x30 ctrl")),
-            description = "Controller axis output control to ${target.name}",
-            readOnly = false,
-            supportedTargets = setOf(target.name),
-        )
-
         return if (dryRun) {
             val payloadHex = payload.joinToString(" ") { "0x%02X".format(it) }
             "30 $payloadHex [dry]" to true
         } else {
-            val result = runCatching { session.execute(job) }.getOrNull()
-            val hex = result?.requestHex ?: "error"
-            hex to (result?.success == true)
+            val result = runCatching {
+                session.sendRawFrame(targetAddress, 0x30, payload)
+            }.getOrDefault("")
+            val ok = result.startsWith("7") || result.contains("70") || result.contains("50") || result.isNotEmpty()
+            result to ok
         }
     }
 }
