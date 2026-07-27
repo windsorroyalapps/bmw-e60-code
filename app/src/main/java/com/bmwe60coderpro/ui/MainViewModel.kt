@@ -36,6 +36,7 @@ import com.bmwe60coderpro.protocol.SteeringRetrofitManager
 import com.bmwe60coderpro.protocol.SteeringRetrofitPresetKind
 import com.bmwe60coderpro.protocol.Transport
 import com.bmwe60coderpro.usb.UsbSerialTransport
+import com.bmwe60coderpro.usb.UsbPermissionManager
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -1122,6 +1123,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
             }
     }
 }
+
 
 
 
