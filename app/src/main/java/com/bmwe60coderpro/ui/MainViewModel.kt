@@ -1101,7 +1101,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
 
     private fun buildTransport(profile: ConnectionProfile): Transport {
         return when (profile.transport) {
-            TransportType.USB_KDCAN -> UsbSerialTransport(application, profile.baudRate, profile.readTimeoutMs)
+            TransportType.USB_KDCAN -> UsbSerialTransport(application, UsbPermissionManager(application))
             TransportType.ETHERNET_OBD -> TcpObdTransport(profile.tcpHost, profile.tcpPort, profile.connectTimeoutMs, profile.readTimeoutMs)
         }
     }
@@ -1122,6 +1122,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
             }
     }
 }
+
 
 
 
