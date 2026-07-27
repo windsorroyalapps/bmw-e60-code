@@ -5,6 +5,8 @@ import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.bmwe60coderpro.ui.AppRoot
@@ -28,6 +30,18 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleUsbIntent(intent)
+    }
+
+    /** Forward gamepad/joystick motion events to the ViewModel so live axes update. */
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        viewModel.onControllerMotion(event)
+        return super.dispatchGenericMotionEvent(event)
+    }
+
+    /** Forward gamepad button events (A, B, RB, LB, etc.) to the ViewModel. */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (viewModel.onControllerKey(event)) return true
+        return super.dispatchKeyEvent(event)
     }
 
     private fun handleUsbIntent(intent: Intent?) {
