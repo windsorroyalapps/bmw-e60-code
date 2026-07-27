@@ -14,17 +14,18 @@ private const val TAG = "MainActivity"
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: MainViewModel by viewModels()
+    private lateinit var viewModel: MainViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        viewModel = MainViewModel(application)
         handleUsbIntent(intent)
         setContent {
             AppRoot(viewModel)
         }
     }
 
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleUsbIntent(intent)
     }
@@ -33,13 +34,10 @@ class MainActivity : ComponentActivity() {
         when (intent?.action) {
             UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
                 val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
-                Log.d(TAG, "USB attached: ${device?.deviceName} VID=${device?.vendorId} PID=${device?.productId}")
-                viewModel.onUsbDeviceAttached(device)
+                Log.d(TAG, "USB attached: ${device?.deviceName}")
             }
             UsbManager.ACTION_USB_DEVICE_DETACHED -> {
-                val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
-                Log.d(TAG, "USB detached: ${device?.deviceName}")
-                viewModel.onUsbDeviceDetached()
+                Log.d(TAG, "USB detached")
             }
         }
     }
