@@ -7,11 +7,9 @@ import kotlinx.coroutines.delay
 /**
  * Xbox wired USB controller → BMW E60 vehicle bus injection.
  *
- * IMPROVEMENTS:
- * 1. Uses KdcanSession.sendRawFrame() — no session target switching, no job overhead.
- * 2. Starts extended diagnostic sessions (0x10 0x03) on each target before injection.
- * 3. Keeps sessions alive with periodic 0x3E tester present.
- * 4. Throttled to ~10 Hz — K-line cannot sustain 50 Hz real-time control.
+ * Sends KWP2000 IOCBLI (0x30) frames directly to DME and DSC without
+ * session target switching. Requires extended diagnostic sessions (0x10 0x03)
+ * to be active on each target before control frames will be accepted.
  */
 
 object ControllerInjector {
@@ -24,7 +22,6 @@ object ControllerInjector {
         val steeringOk: Boolean,
         val brakeOk: Boolean,
         val summary: String,
-        val dryRun: Boolean,
     )
 
     data class SessionState(
@@ -36,13 +33,8 @@ object ControllerInjector {
 
     private var sessionState = SessionState()
 
-    /** Start extended diagnostic sessions on DME and DSC. Call once at bridge start. */
-    suspend fun initSessions(session: KdcanSession, dryRun: Boolean = true): String {
-        if (dryRun) {
-            sessionState = SessionState(dmeSessionActive = true, dscSessionActive = true)
-            return "[DRY] Sessions simulated active"
-        }
-
+    /** Start extended diagnostic sessions (0x10 0x03) on DME and DSC. */
+    suspend fun initSessions(session: KdcanSession): String {
         val dmeResult = runCatching {
             session.sendRawFrame(BmwTargets.DME.targetAddress, 0x10, listOf(0x03))
         }.getOrDefault("")
@@ -69,9 +61,7 @@ object ControllerInjector {
     }
 
     /** Send tester present (0x3E) to keep sessions alive. Call every ~2 s. */
-    suspend fun keepAlive(session: KdcanSession, dryRun: Boolean = true): String {
-        if (dryRun) return "[DRY] Keep-alive simulated"
-
+    suspend fun keepAlive(session: KdcanSession): String {
         val now = System.currentTimeMillis()
         var dmeResult = ""
         var dscResult = ""
@@ -104,7 +94,6 @@ object ControllerInjector {
         sendThrottle: Boolean = true,
         sendSteering: Boolean = false,
         sendBrake: Boolean = false,
-        dryRun: Boolean = true,
     ): TickResult {
         var throttleHex = ""
         var steeringHex = ""
@@ -114,29 +103,28 @@ object ControllerInjector {
         var bOk = false
 
         if (sendThrottle && commands.throttlePayload.isNotEmpty()) {
-            val r = sendControl(session, BmwTargets.DME.targetAddress, commands.throttlePayload, dryRun)
+            val r = sendControl(session, BmwTargets.DME.targetAddress, commands.throttlePayload)
             throttleHex = r.first
             tOk = r.second
         }
 
         if (sendSteering && commands.steeringPayload.isNotEmpty()) {
-            val r = sendControl(session, BmwTargets.DSC.targetAddress, commands.steeringPayload, dryRun)
+            val r = sendControl(session, BmwTargets.DSC.targetAddress, commands.steeringPayload)
             steeringHex = r.first
             sOk = r.second
         }
 
         if (sendBrake && commands.brakePayload.isNotEmpty()) {
-            val r = sendControl(session, BmwTargets.DSC.targetAddress, commands.brakePayload, dryRun)
+            val r = sendControl(session, BmwTargets.DSC.targetAddress, commands.brakePayload)
             brakeHex = r.first
             bOk = r.second
         }
 
         val summary = buildString {
-            if (dryRun) append("[DRY] ")
             append(commands.summary)
-            if (sendThrottle) append(" THR=${if (tOk || dryRun) "OK" else "FAIL"}")
-            if (sendSteering) append(" STR=${if (sOk || dryRun) "OK" else "FAIL"}")
-            if (sendBrake) append(" BRK=${if (bOk || dryRun) "OK" else "FAIL"}")
+            if (sendThrottle) append(" THR=${if (tOk) "OK" else "FAIL"}")
+            if (sendSteering) append(" STR=${if (sOk) "OK" else "FAIL"}")
+            if (sendBrake) append(" BRK=${if (bOk) "OK" else "FAIL"}")
         }
 
         return TickResult(
@@ -147,12 +135,11 @@ object ControllerInjector {
             steeringOk = sOk,
             brakeOk = bOk,
             summary = summary,
-            dryRun = dryRun,
         )
     }
 
-    /** Emergency stop: zero throttle, full brake hint, both sent immediately. */
-    suspend fun emergencyStop(session: KdcanSession, dryRun: Boolean = true): TickResult {
+    /** Emergency stop: zero throttle, full brake hint. */
+    suspend fun emergencyStop(session: KdcanSession): TickResult {
         val stopCommands = ControllerVehicleCommands(
             throttlePayload = listOf(XboxControllerManager.DME_LOCAL_ID_THROTTLE, 0x03, 0x00),
             steeringPayload = listOf(XboxControllerManager.DSC_LOCAL_ID_STEERING, 0x03, 127),
@@ -166,27 +153,39 @@ object ControllerInjector {
             sendThrottle = true,
             sendSteering = false,
             sendBrake = true,
-            dryRun = dryRun,
         )
     }
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
+    /**
+     * Send a KWP 0x30 IOCBLI frame and validate the response.
+     * Positive response: 0x70 + localId
+     * Negative response: 0x7F + service + NRC
+     */
     private suspend fun sendControl(
         session: KdcanSession,
         targetAddress: Int,
         payload: List<Int>,
-        dryRun: Boolean,
     ): Pair<String, Boolean> {
-        return if (dryRun) {
-            val payloadHex = payload.joinToString(" ") { "0x%02X".format(it) }
-            "30 $payloadHex [dry]" to true
-        } else {
-            val result = runCatching {
-                session.sendRawFrame(targetAddress, 0x30, payload)
-            }.getOrDefault("")
-            val ok = result.startsWith("7") || result.contains("70") || result.contains("50") || result.isNotEmpty()
-            result to ok
+        val result = runCatching {
+            session.sendRawFrame(targetAddress, 0x30, payload)
+        }.getOrDefault("")
+
+        if (result.isEmpty()) return "NO RESPONSE" to false
+
+        // Parse response hex string
+        val bytes = result.trim().split(" ").mapNotNull { it.toIntOrNull(16) }
+
+        // Check for positive response: 0x70 (0x30 + 0x40)
+        val hasPositive = bytes.any { it == 0x70 }
+        // Check for negative response: 0x7F
+        val hasNegative = bytes.any { it == 0x7F }
+
+        return when {
+            hasPositive && !hasNegative -> result to true
+            hasNegative -> "$result (NRC)" to false
+            else -> "$result (unexpected)" to false
         }
     }
 }
