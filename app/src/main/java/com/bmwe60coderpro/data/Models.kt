@@ -22,6 +22,7 @@ enum class ServiceScreen {
     STEERING,
     FLASHING,
     EXPERIMENTS,
+    GAUGES,
 }
 
 enum class CodingPresetKind {
@@ -119,6 +120,21 @@ data class FlashPlan(
     val summary: String,
 )
 
+data class CodingBackup(
+    val timestamp: Long,
+    val module: String,
+    val content: String,
+    val isVo: Boolean = false
+)
+
+data class TuningMap(
+    val id: String,
+    val name: String,
+    val xAxis: List<Int>, // e.g. RPM
+    val yAxis: List<Int>, // e.g. Load/Throttle
+    val table: List<List<Float>>
+)
+
 data class AppState(
     val activeCommProfile: String = "BMW Generic",
     val activeVehicleProfile: String = "Generic E60 / E61",
@@ -144,6 +160,10 @@ data class AppState(
     val codingModule: String = "KOMBI",
     val codingText: String = "KOMBI {\n  DIGITAL_V = nicht_aktiv;\n  GURTWARNUNG = aktiv;\n}\n",
     val codingPreview: String = "",
+    val codingReadResult: String = "",
+    val codingWriteResult: String = "",
+    val codingLiveBusy: Boolean = false,
+    val vehicleOrder: String = "",
     val selectedMapSlot: String = "Sport",
     val tuningSummary: String = "No tune exported yet",
     val flashingModule: String = "DME / DDE",
@@ -164,10 +184,6 @@ data class AppState(
     val mflInjectionLog: List<String> = emptyList(),
     val remoteSafetyMode: RemoteSafetyMode = RemoteSafetyMode.SAFE_SIMULATION,
     val experimentSummary: String = "Experimental features are prepared but not armed",
-    // Live ECU coding engine
-    val codingReadResult: String = "",
-    val codingWriteResult: String = "",
-    val codingLiveBusy: Boolean = false,
     // CCC live map switching
     val cccLiveMapResult: String = "",
     val cccLiveMapBusy: Boolean = false,
@@ -197,9 +213,15 @@ data class AppState(
     val controllerSteeringNorm: Float = 0f,
     val controllerThrottleNorm: Float = 0f,
     val controllerBrakeNorm: Float = 0f,
+    val codingBackups: List<CodingBackup> = emptyList(),
     val controllerLastSummary: String = "—",
     val controllerLog: List<String> = emptyList(),
     val controllerTickHz: String = "—",
+    val fuelMap: TuningMap? = null,
+    val ignitionMap: TuningMap? = null,
+    val tuningLiveBusy: Boolean = false,
+    val tuningReadResult: String = "",
+    val tuningWriteResult: String = "",
 
     // Connection status popup
     val showConnectionPopup: Boolean = false,

@@ -5,6 +5,8 @@ import com.bmwe60coderpro.data.CodingPreset
 import com.bmwe60coderpro.data.CodingPresetKind
 import com.bmwe60coderpro.data.DatenDocument
 
+import com.bmwe60coderpro.util.HexUtils
+
 object DatenManager {
     val presets = listOf(
         CodingPreset(
@@ -153,12 +155,30 @@ object DatenManager {
         return text.map { it.code and 0xFF }
     }
 
-    /** Parse an ASCII coding record returned by 0x1A 0x9B back into a DatenDocument. */
+    /** Parse an ASCII coding record returned by 0x1A 0x9B back into a DatenDocument.
+     *  If the response is not bracketed text, we assume it's a binary record (NETTODAT). */
     fun parseCodingRecord(module: String, asciiResponse: String): DatenDocument {
-        return if (asciiResponse.contains("{") && asciiResponse.contains("}"))
+        return if (asciiResponse.contains("{") && asciiResponse.contains("}")) {
             parse(asciiResponse)
-        else
-            DatenDocument(module, linkedMapOf("raw_response" to asciiResponse))
+        } else {
+            // Treat as binary/hex record
+            val values = linkedMapOf<String, String>()
+            val bytes = asciiResponse.map { it.code.toByte() }.toByteArray()
+            val hex = HexUtils.bytesToHex(bytes).replace(" ", "")
+            values["raw_payload_hex"] = hex
+
+            // Heuristic: If it's a short record, it might be a single parameter
+            if (bytes.size < 8) {
+                values["data_value"] = "0x" + hex
+            } else {
+                // Chunk into 4-byte parameters if possible
+                bytes.toList().chunked(4).forEachIndexed { i, chunk ->
+                    val chunkHex = HexUtils.bytesToHex(chunk.toByteArray()).replace(" ", "")
+                    values["param_$i"] = "0x$chunkHex"
+                }
+            }
+            DatenDocument(module, values)
+        }
     }
 
     fun previewPatch(text: String, preset: CodingPreset): String {

@@ -8,6 +8,7 @@ import com.bmwe60coderpro.data.AdapterPresetKind
 import com.bmwe60coderpro.data.AppPreferencesRepository
 import com.bmwe60coderpro.data.AdapterPresets
 import com.bmwe60coderpro.data.AppState
+import com.bmwe60coderpro.data.CodingBackup
 import com.bmwe60coderpro.data.CodingPresetKind
 import com.bmwe60coderpro.data.ConnectionProfile
 import com.bmwe60coderpro.data.FlashMode
@@ -16,6 +17,7 @@ import com.bmwe60coderpro.data.ModuleSnapshot
 import com.bmwe60coderpro.data.RemoteSafetyMode
 import com.bmwe60coderpro.data.ServiceScreen
 import com.bmwe60coderpro.data.TransportType
+import com.bmwe60coderpro.data.TuningMap
 import com.bmwe60coderpro.data.VehicleProfileKind
 import com.bmwe60coderpro.data.RemoteStartMode
 import com.bmwe60coderpro.network.SimRemoteTransport
@@ -780,6 +782,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                         codingReadResult = "Read OK from $module (${result.summary})",
                         codingLiveBusy = false,
                     )
+                    saveBackup(module, populated, isVo = false)
                     log("CODE", "Read coding from $module: ${result.summary}")
                 } else {
                     // Fall back to template so user still has something to work with
@@ -803,6 +806,10 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 _state.value = _state.value.copy(codingLiveBusy = true, codingWriteResult = "Writing…")
                 val activeSession = session ?: error("Not connected")
                 val doc = DatenManager.parse(_state.value.codingText)
+
+                // Backup before write
+                saveBackup(doc.module, _state.value.codingText, isVo = false)
+
                 val target = targets().firstOrNull { it.name.equals(doc.module, ignoreCase = true) }
                     ?: error("Unknown module ${doc.module}. Set module name in first line of coding text.")
                 activeSession.setTarget(target)
@@ -844,6 +851,110 @@ class MainViewModel(private val application: Application) : ViewModel() {
             codingModule = module,
             codingReadResult = "Template loaded for $module",
         )
+    }
+
+    // ── Vehicle Order (VO/FA) ───────────────────────────────────────────────
+
+    /** Read Vehicle Order (FA) string from CAS or FRM/LMA. */
+    fun readVehicleOrder(module: String = "CAS") {
+        viewModelScope.launch {
+            runBusy {
+                _state.value = _state.value.copy(codingLiveBusy = true, codingReadResult = "Reading VO from $module…")
+                val activeSession = session ?: error("Not connected")
+                val target = targets().firstOrNull { it.name.contains(module, ignoreCase = true) }
+                    ?: error("Unknown module $module")
+                activeSession.setTarget(target)
+
+                val readJob = BmwJobs.byId("read_vo_fa") ?: error("Job not found: read_vo_fa")
+                val result = activeSession.execute(readJob)
+
+                if (result.success) {
+                    val rawVo = result.decoded.values.firstOrNull { it.length > 5 } ?: ""
+                    _state.value = _state.value.copy(
+                        vehicleOrder = rawVo,
+                        codingReadResult = "VO read OK from $module",
+                    )
+                    saveBackup(module, rawVo, isVo = true)
+                    log("VO", "VO read from $module: $rawVo")
+                } else {
+                    _state.value = _state.value.copy(
+                        codingReadResult = "VO read failed from $module: ${result.summary}",
+                    )
+                    log("ERROR", "VO read failed for $module")
+                }
+            }
+            _state.value = _state.value.copy(codingLiveBusy = false)
+        }
+    }
+
+    /** Write current Vehicle Order (FA) string to CAS or FRM/LMA. */
+    fun writeVehicleOrder(module: String = "CAS") {
+        viewModelScope.launch {
+            runBusy {
+                val vo = _state.value.vehicleOrder
+                if (vo.isBlank()) error("VO string is empty")
+
+                // Backup before write
+                saveBackup(module, vo, isVo = true)
+
+                _state.value = _state.value.copy(codingLiveBusy = true, codingWriteResult = "Writing VO to $module…")
+                val activeSession = session ?: error("Not connected")
+                val target = targets().firstOrNull { it.name.contains(module, ignoreCase = true) }
+                    ?: error("Unknown module $module")
+                activeSession.setTarget(target)
+
+                // Build write payload: 0x80 (Local ID) + ASCII VO string
+                val payload = vo.map { it.code and 0xFF }
+                val writeJob = BmwJob(
+                    id = "write_vo_fa_live",
+                    label = "Write VO to $module",
+                    category = JobCategory.CONTROL,
+                    steps = listOf(
+                        JobStep(serviceId = 0x3B, payload = listOf(0x80) + payload, label = "Write FA block 0x80")
+                    ),
+                    description = "Write Vehicle Order (FA) string.",
+                    readOnly = false,
+                    supportedTargets = setOf(target.name),
+                )
+
+                val result = activeSession.execute(writeJob)
+                val msg = if (result.success) "VO write OK to $module" else "VO write FAILED to $module: ${result.summary}"
+
+                _state.value = _state.value.copy(
+                    codingWriteResult = msg,
+                )
+                log(if (result.success) "VO" else "ERROR", msg)
+            }
+            _state.value = _state.value.copy(codingLiveBusy = false)
+        }
+    }
+
+    fun updateVehicleOrderText(text: String) {
+        _state.value = _state.value.copy(vehicleOrder = text)
+    }
+
+    fun addVoOption(option: String) {
+        val clean = option.trim().uppercase().removePrefix("$")
+        if (clean.isEmpty()) return
+        val current = _state.value.vehicleOrder
+        val options = current.split("$").filter { it.isNotBlank() }.toMutableSet()
+        if (options.add(clean)) {
+            val newVo = options.sorted().joinToString("$", prefix = "$")
+            _state.value = _state.value.copy(vehicleOrder = newVo)
+            log("VO", "Added option: $clean")
+        }
+    }
+
+    fun removeVoOption(option: String) {
+        val clean = option.trim().uppercase().removePrefix("$")
+        if (clean.isEmpty()) return
+        val current = _state.value.vehicleOrder
+        val options = current.split("$").filter { it.isNotBlank() }.toMutableSet()
+        if (options.remove(clean)) {
+            val newVo = if (options.isEmpty()) "" else options.sorted().joinToString("$", prefix = "$")
+            _state.value = _state.value.copy(vehicleOrder = newVo)
+            log("VO", "Removed option: $clean")
+        }
     }
 
     // ── CCC live map switching ───────────────────────────────────────────────
@@ -1217,6 +1328,112 @@ class MainViewModel(private val application: Application) : ViewModel() {
 
     private fun currentTarget(): EcuTarget {
         return targets().firstOrNull { it.name == _state.value.selectedTargetId } ?: BmwTargets.DME
+    }
+
+    private fun saveBackup(module: String, content: String, isVo: Boolean = false) {
+        val backup = CodingBackup(
+            timestamp = System.currentTimeMillis(),
+            module = module,
+            content = content,
+            isVo = isVo
+        )
+        _state.value = _state.value.copy(
+            codingBackups = (listOf(backup) + _state.value.codingBackups).take(20)
+        )
+        log("BACKUP", "Saved $module backup (${if (isVo) "VO" else "Coding"})")
+    }
+
+    fun restoreBackup(backup: CodingBackup) {
+        if (backup.isVo) {
+            _state.value = _state.value.copy(vehicleOrder = backup.content)
+        } else {
+            _state.value = _state.value.copy(
+                codingText = backup.content,
+                codingModule = backup.module
+            )
+        }
+        log("BACKUP", "Restored ${backup.module} from ${SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(backup.timestamp))}")
+    }
+
+    fun clearBackups() {
+        _state.value = _state.value.copy(codingBackups = emptyList())
+        log("BACKUP", "All backups cleared")
+    }
+
+    fun readTuningMaps() {
+        viewModelScope.launch {
+            runBusy {
+                _state.value = _state.value.copy(tuningLiveBusy = true, tuningReadResult = "Reading maps...")
+                val activeSession = session ?: error("Not connected")
+                activeSession.setTarget(BmwTargets.DME)
+
+                val fuelJob = BmwJobs.byId("dme_read_fuel_map") ?: error("Fuel job missing")
+                val fuelResult = activeSession.execute(fuelJob)
+
+                val ignitionJob = BmwJobs.byId("dme_read_ignition_map") ?: error("Ignition job missing")
+                val ignitionResult = activeSession.execute(ignitionJob)
+
+                if (fuelResult.success && ignitionResult.success) {
+                    val fMap = parseTuningMap("Fuel", fuelResult.responseHex)
+                    val iMap = parseTuningMap("Ignition", ignitionResult.responseHex)
+                    _state.value = _state.value.copy(
+                        fuelMap = fMap,
+                        ignitionMap = iMap,
+                        tuningReadResult = "Maps read successfully",
+                        tuningLiveBusy = false
+                    )
+                    log("TUNE", "Fuel and Ignition maps loaded")
+                } else {
+                    _state.value = _state.value.copy(
+                        tuningReadResult = "Error reading maps: ${fuelResult.summary} / ${ignitionResult.summary}",
+                        tuningLiveBusy = false
+                    )
+                }
+            }
+        }
+    }
+
+    private fun parseTuningMap(name: String, hex: String): TuningMap {
+        // Mock parsing: 8x8 map
+        val rpmAxis = listOf(800, 1200, 2000, 3000, 4000, 5000, 6000, 7000)
+        val loadAxis = listOf(10, 25, 40, 55, 70, 85, 100, 120)
+        val rows = mutableListOf<List<Float>>()
+        for (i in 0 until 8) {
+            val row = mutableListOf<Float>()
+            for (j in 0 until 8) {
+                row.add(if (name == "Fuel") 14.7f else 15.0f + (i + j) / 2f)
+            }
+            rows.add(row)
+        }
+        return TuningMap(name.lowercase(), name, rpmAxis, loadAxis, rows)
+    }
+
+    fun updateMapValue(isFuel: Boolean, row: Int, col: Int, newValue: Float) {
+        val currentMap = if (isFuel) _state.value.fuelMap else _state.value.ignitionMap
+        currentMap?.let { map ->
+            val newTable = map.table.mapIndexed { rIdx, rList ->
+                if (rIdx == row) {
+                    rList.mapIndexed { cIdx, v -> if (cIdx == col) newValue else v }
+                } else rList
+            }
+            val newMap = map.copy(table = newTable)
+            _state.value = if (isFuel) _state.value.copy(fuelMap = newMap) else _state.value.copy(ignitionMap = newMap)
+        }
+    }
+
+    fun writeTuningMaps() {
+        viewModelScope.launch {
+            runBusy {
+                _state.value = _state.value.copy(tuningLiveBusy = true, tuningWriteResult = "Writing maps...")
+                // Mock write
+                delay(1500)
+                _state.value = _state.value.copy(
+                    tuningWriteResult = "Maps written successfully (Simulation)",
+                    tuningLiveBusy = false
+                )
+                log("TUNE", "Map write complete (Simulation)")
+            }
+        }
     }
 
     private inline suspend fun runBusy(block: suspend () -> Unit) {

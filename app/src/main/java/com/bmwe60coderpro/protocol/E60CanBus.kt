@@ -65,9 +65,10 @@ object E60CanBus {
             length = 8,
             description = "Engine RPM and throttle position",
             fields = listOf(
-                FieldDef("rpm", 0, 0, 16, scale = 0.25, unit = "rpm"),
-                FieldDef("throttle_pct", 2, 0, 16, scale = 0.01, unit = "%"),
-                FieldDef("torque_request", 4, 0, 16, signed = true, scale = 0.01, unit = "Nm"),
+                FieldDef("engine_speed_rpm", 0, 0, 16, scale = 0.25, unit = "rpm"),
+                FieldDef("throttle_angle_pct", 2, 0, 16, scale = 0.01, unit = "%"),
+                FieldDef("pedal_pct", 4, 0, 8, scale = 0.39, unit = "%"),
+                FieldDef("torque_request", 5, 0, 16, signed = true, scale = 0.01, unit = "Nm"),
             )
         ),
         CanMessageDef(
@@ -93,6 +94,18 @@ object E60CanBus {
             )
         ),
         CanMessageDef(
+            id = 0x0D9,
+            name = "GearStatus",
+            bus = CanBus.PT_CAN,
+            length = 8,
+            description = "Current gear and selector position from EGS",
+            fields = listOf(
+                FieldDef("current_gear_raw", 0, 0, 4, scale = 1.0, unit = "raw"),
+                FieldDef("selector_pos", 0, 4, 4, scale = 1.0, unit = "raw"),
+                FieldDef("oil_temp_c", 1, 0, 8, scale = 1.0, offset = -40.0, unit = "°C"),
+            )
+        ),
+        CanMessageDef(
             id = 0x0CE,
             name = "WheelSpeeds",
             bus = CanBus.PT_CAN,
@@ -103,6 +116,30 @@ object E60CanBus {
                 FieldDef("wheel_fr", 2, 0, 16, scale = 0.01, unit = "km/h"),
                 FieldDef("wheel_rl", 4, 0, 16, scale = 0.01, unit = "km/h"),
                 FieldDef("wheel_rr", 6, 0, 16, scale = 0.01, unit = "km/h"),
+            )
+        ),
+        CanMessageDef(
+            id = 0x1D0,
+            name = "EngineData1",
+            bus = CanBus.PT_CAN,
+            length = 8,
+            description = "Engine temperatures and intake data from DME",
+            fields = listOf(
+                FieldDef("coolant_temp_c", 0, 0, 8, scale = 0.75, offset = -48.0, unit = "°C"),
+                FieldDef("intake_temp_c", 1, 0, 8, scale = 0.75, offset = -48.0, unit = "°C"),
+                FieldDef("oil_temp_c", 2, 0, 8, scale = 1.0, offset = -60.0, unit = "°C"),
+            )
+        ),
+        CanMessageDef(
+            id = 0x1D2,
+            name = "EngineData2",
+            bus = CanBus.PT_CAN,
+            length = 8,
+            description = "Additional engine parameters",
+            fields = listOf(
+                FieldDef("clutch_switch", 0, 0, 1, scale = 1.0, unit = "bool"),
+                FieldDef("brake_switch", 0, 1, 1, scale = 1.0, unit = "bool"),
+                FieldDef("oil_pressure_switch", 0, 2, 1, scale = 1.0, unit = "bool"),
             )
         ),
         CanMessageDef(
@@ -124,8 +161,8 @@ object E60CanBus {
             length = 8,
             description = "Speed as used by instrument cluster",
             fields = listOf(
-                FieldDef("speed_kph", 0, 0, 16, scale = 0.01, unit = "km/h"),
-                FieldDef("rpm", 2, 0, 16, scale = 0.25, unit = "rpm"),
+                FieldDef("vehicle_speed_kph", 0, 0, 16, scale = 0.01, unit = "km/h"),
+                FieldDef("engine_speed_rpm", 2, 0, 16, scale = 0.25, unit = "rpm"),
             )
         ),
         CanMessageDef(
@@ -137,6 +174,19 @@ object E60CanBus {
             fields = listOf(
                 FieldDef("speed_mph", 0, 0, 16, scale = 0.01, unit = "mph"),
                 FieldDef("handbrake", 2, 0, 8, scale = 1.0, unit = "bool"),
+            )
+        ),
+        CanMessageDef(
+            id = 0x4B0,
+            name = "WheelSpeedsHR",
+            bus = CanBus.PT_CAN,
+            length = 8,
+            description = "High-resolution wheel speeds from DSC",
+            fields = listOf(
+                FieldDef("wheel_fl", 0, 0, 16, scale = 0.0625, unit = "km/h"),
+                FieldDef("wheel_fr", 2, 0, 16, scale = 0.0625, unit = "km/h"),
+                FieldDef("wheel_rl", 4, 0, 16, scale = 0.0625, unit = "km/h"),
+                FieldDef("wheel_rr", 6, 0, 16, scale = 0.0625, unit = "km/h"),
             )
         ),
     )
@@ -158,6 +208,21 @@ object E60CanBus {
             )
         ),
         CanMessageDef(
+            id = 0x1B8,
+            name = "MFLButtons",
+            bus = CanBus.K_CAN,
+            length = 2,
+            description = "Multi-function steering wheel buttons from SZL",
+            fields = listOf(
+                FieldDef("vol_up", 0, 0, 1, scale = 1.0, unit = "bool"),
+                FieldDef("vol_down", 0, 1, 1, scale = 1.0, unit = "bool"),
+                FieldDef("next", 0, 2, 1, scale = 1.0, unit = "bool"),
+                FieldDef("prev", 0, 3, 1, scale = 1.0, unit = "bool"),
+                FieldDef("voice", 1, 0, 1, scale = 1.0, unit = "bool"),
+                FieldDef("tel", 1, 1, 1, scale = 1.0, unit = "bool"),
+            )
+        ),
+        CanMessageDef(
             id = 0x1C2,
             name = "PDCData",
             bus = CanBus.K_CAN,
@@ -170,6 +235,22 @@ object E60CanBus {
                 FieldDef("pdc_rear_left", 3, 0, 8, scale = 1.0, unit = "cm"),
                 FieldDef("pdc_rear_mid", 4, 0, 8, scale = 1.0, unit = "cm"),
                 FieldDef("pdc_rear_right", 5, 0, 8, scale = 1.0, unit = "cm"),
+            )
+        ),
+        CanMessageDef(
+            id = 0x212,
+            name = "LightsStatus",
+            bus = CanBus.K_CAN,
+            length = 3,
+            description = "Status of exterior and interior lights from LMA",
+            fields = listOf(
+                FieldDef("low_beam", 0, 0, 1, scale = 1.0, unit = "bool"),
+                FieldDef("high_beam", 0, 1, 1, scale = 1.0, unit = "bool"),
+                FieldDef("parking_light", 0, 2, 1, scale = 1.0, unit = "bool"),
+                FieldDef("fog_light_front", 0, 3, 1, scale = 1.0, unit = "bool"),
+                FieldDef("fog_light_rear", 0, 4, 1, scale = 1.0, unit = "bool"),
+                FieldDef("turn_left", 1, 0, 1, scale = 1.0, unit = "bool"),
+                FieldDef("turn_right", 1, 1, 1, scale = 1.0, unit = "bool"),
             )
         ),
         CanMessageDef(
@@ -440,6 +521,16 @@ object E60CanBus {
             )
         ),
         CanMessageDef(
+            id = 0x3A0,
+            name = "EngineData3",
+            bus = CanBus.PT_CAN,
+            length = 8,
+            description = "More engine data (often used for battery/alt)",
+            fields = listOf(
+                FieldDef("battery_v", 0, 0, 8, scale = 0.1, offset = 0.0, unit = "V"),
+            )
+        ),
+        CanMessageDef(
             id = 0x3B6,
             name = "PassengerWindow",
             bus = CanBus.K_CAN,
@@ -494,6 +585,19 @@ object E60CanBus {
                 FieldDef("passenger_belt", 0, 1, 1, scale = 1.0, unit = "bool"),
                 FieldDef("rear_left_belt", 0, 2, 1, scale = 1.0, unit = "bool"),
                 FieldDef("rear_right_belt", 0, 3, 1, scale = 1.0, unit = "bool"),
+            )
+        ),
+        CanMessageDef(
+            id = 0x3B3,
+            name = "KombiStatus",
+            bus = CanBus.K_CAN,
+            length = 8,
+            description = "Instrument cluster status and indicators",
+            fields = listOf(
+                FieldDef("indicator_left", 0, 0, 1, scale = 1.0, unit = "bool"),
+                FieldDef("indicator_right", 0, 1, 1, scale = 1.0, unit = "bool"),
+                FieldDef("high_beam", 0, 2, 1, scale = 1.0, unit = "bool"),
+                FieldDef("low_fuel_warning", 1, 0, 1, scale = 1.0, unit = "bool"),
             )
         ),
     )

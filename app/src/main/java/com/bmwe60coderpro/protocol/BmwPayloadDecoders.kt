@@ -109,7 +109,18 @@ object BmwPayloadDecoders {
             BmwTargets.FRM.name -> decodeFrm(localId, body, map)
             BmwTargets.ACSM.name -> decodeAcsm(localId, body, map)
             BmwTargets.CCC.name -> decodeCcc(localId, body, map)
-            else -> decodeGenericBlock(body, map)
+            else -> {
+                if (localId == 0x80) decodeVoBlock(body, map)
+                else decodeGenericBlock(body, map)
+            }
+        }
+    }
+
+    private fun decodeVoBlock(body: List<Int>, map: MutableMap<String, String>) {
+        val voString = asciiFrom(body).trim()
+        map["vehicle_order"] = voString
+        if (voString.isNotBlank()) {
+            map["result"] = "VO: $voString"
         }
     }
 
@@ -311,12 +322,14 @@ object BmwPayloadDecoders {
         BmwTargets.CAS.name -> when (localId) {
             0x01 -> "terminal / start authorization block"
             0x82 -> "key slot / remote status block"
+            0x80 -> "Vehicle Order (FA) block"
             0x81 -> "ASCII / VIN text"
             else -> "module-specific block"
         }
         BmwTargets.FRM.name -> when (localId) {
             0x01 -> "lighting / windows status block"
             0x11 -> "output stage block"
+            0x80 -> "Vehicle Order (FA) block"
             0x81 -> "ASCII / VIN text"
             else -> "module-specific block"
         }

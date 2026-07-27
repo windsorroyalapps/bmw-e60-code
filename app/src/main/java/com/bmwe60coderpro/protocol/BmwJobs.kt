@@ -503,6 +503,65 @@ object BmwJobs {
             readOnly = false,
             supportedTargets = setOf(BmwTargets.CCC.name),
         ),
+        // Vehicle Order (FA) jobs for CAS and LMA/FRM
+        BmwJob(
+            id = "read_vo_fa",
+            label = "Read Vehicle Order (FA)",
+            category = JobCategory.IDENTIFICATION,
+            steps = listOf(
+                step(0x10, 0x81, label = "Default session"),
+                step(0x21, 0x80, label = "Read FA block 0x80"),
+            ),
+            description = "Read the Vehicle Order string (FA) from CAS or LMA/FRM.",
+            supportedTargets = setOf(BmwTargets.CAS.name, BmwTargets.FRM.name),
+        ),
+        BmwJob(
+            id = "write_vo_fa",
+            label = "Write Vehicle Order (FA)",
+            category = JobCategory.CONTROL,
+            steps = listOf(
+                step(0x10, 0x81, label = "Default session"),
+                step(0x3B, 0x80, label = "Write FA block 0x80"),
+            ),
+            description = "Write a new Vehicle Order string (FA) to CAS or LMA/FRM.",
+            readOnly = false,
+            supportedTargets = setOf(BmwTargets.CAS.name, BmwTargets.FRM.name),
+        ),
+        // DME map reading jobs (KWP 0x23 readMemoryByAddress / 0x21 local IDs)
+        BmwJob(
+            id = "dme_read_fuel_map",
+            label = "Read DME Fuel Map",
+            category = JobCategory.IDENTIFICATION,
+            steps = listOf(
+                step(0x10, 0x86, label = "Extended session"),
+                step(0x21, 0xA0, label = "Read map block 0xA0 (Fuel)"),
+            ),
+            description = "Read the fuel injection map block from DME.",
+            supportedTargets = setOf(BmwTargets.DME.name),
+        ),
+        BmwJob(
+            id = "dme_read_ignition_map",
+            label = "Read DME Ignition Map",
+            category = JobCategory.IDENTIFICATION,
+            steps = listOf(
+                step(0x10, 0x86, label = "Extended session"),
+                step(0x21, 0xA1, label = "Read map block 0xA1 (Ignition)"),
+            ),
+            description = "Read the ignition timing map block from DME.",
+            supportedTargets = setOf(BmwTargets.DME.name),
+        ),
+        BmwJob(
+            id = "dme_write_map_chunk",
+            label = "Write DME Map Chunk",
+            category = JobCategory.CONTROL,
+            steps = listOf(
+                step(0x10, 0x85, label = "Programming session"),
+                step(0x3D, label = "Write memory by address"),
+            ),
+            description = "Write a map chunk to DME memory. Requires security access.",
+            readOnly = false,
+            supportedTargets = setOf(BmwTargets.DME.name),
+        ),
     )
 
     val all: List<BmwJob> = generic + serviceJobs + moduleSpecific

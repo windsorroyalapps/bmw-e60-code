@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -36,6 +37,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material3.TextButton
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.bmwe60coderpro.data.AdapterPresets
 import com.bmwe60coderpro.data.AppState
 import com.bmwe60coderpro.data.CodingPresetKind
@@ -44,9 +49,22 @@ import com.bmwe60coderpro.data.ModuleSnapshot
 import com.bmwe60coderpro.data.RemoteStartMode
 import com.bmwe60coderpro.data.RemoteSafetyMode
 import com.bmwe60coderpro.data.ServiceScreen
+import com.bmwe60coderpro.data.TuningMap
 import com.bmwe60coderpro.data.TransportType
 import com.bmwe60coderpro.protocol.DatenManager
 import com.bmwe60coderpro.protocol.E60AddressBook
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.CardDefaults
 
 @Composable
 fun AppRoot(vm: MainViewModel) {
@@ -135,6 +153,7 @@ fun AppRoot(vm: MainViewModel) {
                 })
             }
             ServiceScreen.EXPERIMENTS -> item { ExperimentalScreen(state, vm) }
+            ServiceScreen.GAUGES -> item { GaugesScreen(state, vm) }
             else -> {
                 item { TransportCompactCard(state = state, vm = vm) }
                 item {
@@ -314,6 +333,71 @@ private fun CodingScreen(state: AppState, vm: MainViewModel, text: String, onTex
             }
         }
 
+        // ── Vehicle Order (VO/FA) ───────────────────────────────────────────
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Vehicle Order (VO / FA)", style = MaterialTheme.typography.titleMedium)
+                Text("The VO string defines vehicle options. Stored in CAS and FRM/LMA.",
+                    style = MaterialTheme.typography.bodySmall)
+
+                OutlinedTextField(
+                    value = state.vehicleOrder,
+                    onValueChange = vm::updateVehicleOrderText,
+                    label = { Text("VO / FA String") },
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontFamily = FontFamily.Monospace),
+                )
+
+                var voOption by remember { mutableStateOf("") }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = voOption,
+                        onValueChange = { voOption = it },
+                        label = { Text("Add/Remove Option (e.g. $676)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    Button(onClick = { vm.addVoOption(voOption); voOption = "" }) {
+                        Text("Add")
+                    }
+                    Button(onClick = { vm.removeVoOption(voOption); voOption = "" }) {
+                        Text("Rem")
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { vm.readVehicleOrder("CAS") },
+                        enabled = state.connected && !state.busy && !state.codingLiveBusy,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Read CAS") }
+                    Button(
+                        onClick = { vm.readVehicleOrder("FRM") },
+                        enabled = state.connected && !state.busy && !state.codingLiveBusy,
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Read FRM") }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { vm.writeVehicleOrder("CAS") },
+                        enabled = state.connected && !state.busy && !state.codingLiveBusy,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Write CAS") }
+                    Button(
+                        onClick = { vm.writeVehicleOrder("FRM") },
+                        enabled = state.connected && !state.busy && !state.codingLiveBusy,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Write FRM") }
+                }
+            }
+        }
+
         // ── Coding presets ─────────────────────────────────────────────────
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -372,12 +456,94 @@ private fun CodingScreen(state: AppState, vm: MainViewModel, text: String, onTex
                 }
             }
         }
+
+        // ── Trace Backups ──────────────────────────────────────────────────
+        if (state.codingBackups.isNotEmpty()) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Trace Backups", style = MaterialTheme.typography.titleMedium)
+                        TextButton(onClick = vm::clearBackups) { Text("Clear") }
+                    }
+                    Text("Auto-saved before writes and after reads.", style = MaterialTheme.typography.bodySmall)
+
+                    state.codingBackups.forEach { backup ->
+                        val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(backup.timestamp))
+                        OutlinedButton(
+                            onClick = { vm.restoreBackup(backup) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("${if (backup.isVo) "VO" else backup.module} @ $time", style = MaterialTheme.typography.labelMedium)
+                                Text("Restore", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
 private fun TuningScreen(state: AppState, vm: MainViewModel) {
+    val bmwOrange = Color(0xFFFF8800)
+    val darkBackground = Color(0xFF1A1A1A)
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // ── DME Live Tuning Card ──────────────────────────────────────────
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = darkBackground)
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("DME Live Map Tuning", style = MaterialTheme.typography.titleLarge, color = bmwOrange)
+                Text(
+                    "Read and modify fuel and ignition maps directly from DME RAM/Flash. " +
+                    "Modification is for track use only.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = bmwOrange.copy(alpha = 0.7f)
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = vm::readTuningMaps,
+                        enabled = state.connected && !state.tuningLiveBusy,
+                        colors = ButtonDefaults.buttonColors(containerColor = bmwOrange, contentColor = Color.Black)
+                    ) { Text("↓ Read DME Maps") }
+                    Button(
+                        onClick = vm::writeTuningMaps,
+                        enabled = state.connected && !state.tuningLiveBusy && (state.fuelMap != null || state.ignitionMap != null),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Red, contentColor = Color.White)
+                    ) { Text("↑ Write to DME") }
+                }
+
+                if (state.tuningReadResult.isNotEmpty()) {
+                    Text(state.tuningReadResult, color = bmwOrange, style = MaterialTheme.typography.labelSmall)
+                }
+                if (state.tuningWriteResult.isNotEmpty()) {
+                    Text(state.tuningWriteResult, color = Color.Red, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+
+        // ── Map Editor ────────────────────────────────────────────────────
+        state.fuelMap?.let { map ->
+            MapEditorCard("Fuel Injection Map (Target Lambda)", map, true, vm)
+        }
+
+        state.ignitionMap?.let { map ->
+            MapEditorCard("Ignition Timing Map (Advance BTDC)", map, false, vm)
+        }
+
+        // ── CCC Integration ───────────────────────────────────────────────
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("CCC map switching / tuning", style = MaterialTheme.typography.titleLarge)
@@ -418,6 +584,76 @@ private fun TuningScreen(state: AppState, vm: MainViewModel) {
                 if (state.cccLiveMapResult.isNotBlank()) {
                     Text(state.cccLiveMapResult, fontFamily = FontFamily.Monospace,
                         style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapEditorCard(title: String, map: TuningMap, isFuel: Boolean, vm: MainViewModel) {
+    val bmwOrange = Color(0xFFFF8800)
+    val darkBackground = Color(0xFF1A1A1A)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = darkBackground),
+        border = androidx.compose.foundation.BorderStroke(1.dp, bmwOrange.copy(alpha = 0.5f))
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(title, color = bmwOrange, style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+
+            // Scrollable Grid for Map
+            Box(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                Column {
+                    // Header (RPM)
+                    Row {
+                        Spacer(modifier = Modifier.width(60.dp))
+                        map.xAxis.forEach { rpm ->
+                            Text(
+                                rpm.toString(),
+                                modifier = Modifier.width(60.dp),
+                                textAlign = TextAlign.Center,
+                                color = bmwOrange.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+
+                    map.table.forEachIndexed { rIdx, row ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Sidebar (Load)
+                            Text(
+                                map.yAxis[rIdx].toString(),
+                                modifier = Modifier.width(60.dp),
+                                textAlign = TextAlign.End,
+                                color = bmwOrange.copy(alpha = 0.7f),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                            row.forEachIndexed { cIdx, value ->
+                                var textValue by remember(value) { mutableStateOf("%.2f".format(value)) }
+                                OutlinedTextField(
+                                    value = textValue,
+                                    onValueChange = {
+                                        textValue = it
+                                        it.toFloatOrNull()?.let { f ->
+                                            vm.updateMapValue(isFuel, rIdx, cIdx, f)
+                                        }
+                                    },
+                                    modifier = Modifier.width(60.dp).padding(2.dp),
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        color = bmwOrange,
+                                        fontSize = 12.sp,
+                                        textAlign = TextAlign.Center,
+                                        fontFamily = FontFamily.Monospace
+                                    ),
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -631,6 +867,112 @@ private fun FlashingScreen(state: AppState, vm: MainViewModel, hex: String, onHe
                 Text("Frames: ${plan.chunkCount} x ${plan.chunkSize} bytes")
                 plan.frames.take(8).forEach { frame -> Text(frame, fontFamily = FontFamily.Monospace) }
                 if (plan.frames.size > 8) Text("… ${plan.frames.size - 8} more frame(s)")
+            }
+        }
+    }
+}
+
+@Composable
+private fun GaugesScreen(state: AppState, vm: MainViewModel) {
+    val bmwOrange = Color(0xFFFF8800)
+    val darkBackground = Color(0xFF1A1A1A)
+
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = darkBackground)
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Performance Gauges", style = MaterialTheme.typography.titleLarge, color = bmwOrange)
+                    Button(
+                        onClick = { if (state.pollingEnabled) vm.stopDashboardPolling() else vm.startDashboardPolling() },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (state.pollingEnabled) Color.Red else bmwOrange,
+                            contentColor = Color.Black
+                        )
+                    ) {
+                        Text(if (state.pollingEnabled) "Stop" else "Start Polling")
+                    }
+                }
+                Text("Real-time data from DME, EGS, and DSC", style = MaterialTheme.typography.bodySmall, color = bmwOrange.copy(alpha = 0.7f))
+            }
+        }
+
+        // Main Gauges Grid
+        val dme = state.moduleSnapshots["DME / DDE"]?.decoded ?: emptyMap()
+        val egs = state.moduleSnapshots["EGS"]?.decoded ?: emptyMap()
+        val dsc = state.moduleSnapshots["DSC"]?.decoded ?: emptyMap()
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            GaugeBox(label = "RPM", value = dme["engine_speed_rpm"] ?: "0", unit = "min⁻¹", modifier = Modifier.weight(1f))
+            GaugeBox(label = "Speed", value = dsc["vehicle_speed_kph"] ?: "0", unit = "km/h", modifier = Modifier.weight(1f))
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            GaugeBox(label = "Coolant", value = dme["coolant_temp_c"] ?: "0", unit = "°C", modifier = Modifier.weight(1f))
+            GaugeBox(label = "Oil Temp", value = egs["oil_temp_c"] ?: "0", unit = "°C", modifier = Modifier.weight(1f))
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            GaugeBox(label = "Gear", value = egs["current_gear_raw"] ?: "P", unit = "", modifier = Modifier.weight(1f))
+            GaugeBox(label = "Voltage", value = dme["battery_v"] ?: "0.0", unit = "V", modifier = Modifier.weight(1f))
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = darkBackground)
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Additional Data", color = bmwOrange, style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Throttle", color = bmwOrange.copy(alpha = 0.8f))
+                    Text("${dme["throttle_angle_pct"] ?: "0"} %", color = bmwOrange, fontFamily = FontFamily.Monospace)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Pedal", color = bmwOrange.copy(alpha = 0.8f))
+                    Text("${dme["pedal_pct"] ?: "0"} %", color = bmwOrange, fontFamily = FontFamily.Monospace)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Intake Temp", color = bmwOrange.copy(alpha = 0.8f))
+                    Text("${dme["intake_temp_c"] ?: "0"} °C", color = bmwOrange, fontFamily = FontFamily.Monospace)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GaugeBox(label: String, value: String, unit: String, modifier: Modifier = Modifier) {
+    val bmwOrange = Color(0xFFFF8800)
+    val darkBackground = Color(0xFF1A1A1A)
+
+    Card(
+        modifier = modifier.aspectRatio(1f),
+        colors = CardDefaults.cardColors(containerColor = darkBackground),
+        border = androidx.compose.foundation.BorderStroke(2.dp, bmwOrange.copy(alpha = 0.3f))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(label.uppercase(), color = bmwOrange.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                value,
+                color = bmwOrange,
+                fontSize = 32.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.Center
+            )
+            if (unit.isNotEmpty()) {
+                Text(unit, color = bmwOrange.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
             }
         }
     }

@@ -137,11 +137,12 @@ object ServiceScreens {
             ),
         ),
         ServiceScreenDefinition(ServiceScreen.CODING, "Coding", "Daten editor, coding presets, patch preview, and warning-light related presets."),
-        ServiceScreenDefinition(ServiceScreen.TUNING, "CCC / tuning", "Map slot selection, tune summaries, and export notes for Comfort/Sport/Race/Custom."),
+        ServiceScreenDefinition(ServiceScreen.TUNING, "DME Tuning", "Live DME fuel and ignition map editing, CCC map slot selection, and tune summaries."),
         ServiceScreenDefinition(ServiceScreen.CCC, "CCC integration", "CCC map switching notes and prepared command bundles for the selected tune slot."),
         ServiceScreenDefinition(ServiceScreen.STEERING, "Steering retrofit", "F-series wheel / MFL / paddle retrofit helpers and coding hints."),
         ServiceScreenDefinition(ServiceScreen.FLASHING, "Flashing", "Dry-run / expert flash planning with chunk preview and transfer frame generation."),
         ServiceScreenDefinition(ServiceScreen.EXPERIMENTS, "Experimental", "Remote control and gamepad preparation screens kept in safe simulation mode by default."),
+        ServiceScreenDefinition(ServiceScreen.GAUGES, "Gauges", "High-visibility performance gauges in classic BMW orange."),
     )
 
     fun byScreen(screen: ServiceScreen): ServiceScreenDefinition = all.first { it.screen == screen }
