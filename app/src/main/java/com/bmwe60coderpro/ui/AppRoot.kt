@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -111,6 +112,9 @@ fun AppRoot(vm: MainViewModel) {
                 item { VehicleProfileCard(state, vm, selectedVehicleProfile.label, selectedVehicleProfile.notes) }
                 item { AdapterPresetCard(state, vm, selectedPreset.label, selectedPreset.notes) }
                 item { TransportCard(state = state, vm = vm) }
+                if (state.showConnectionPopup) {
+                    item { ConnectionStatusPopup(state = state, vm = vm) }
+                }
                 item { OverviewJobsCard(state, vm, rawHexState.value, { rawHexState.value = it }) }
             }
             ServiceScreen.CODING -> item {
@@ -131,6 +135,9 @@ fun AppRoot(vm: MainViewModel) {
             ServiceScreen.EXPERIMENTS -> item { ExperimentalScreen(state, vm) }
             else -> {
                 item { TransportCompactCard(state = state, vm = vm) }
+                if (state.showConnectionPopup) {
+                    item { ConnectionStatusPopup(state = state, vm = vm) }
+                }
                 item {
                     DedicatedServiceModuleCard(
                         vm = vm,
@@ -1105,4 +1112,53 @@ private fun DecodedPayloadCard(decodedFields: Map<String, String>) {
             }
         }
     }
+
+@Composable
+private fun ConnectionStatusPopup(state: AppState, vm: MainViewModel) {
+    AlertDialog(
+        onDismissRequest = { if (!state.busy) vm.dismissConnectionPopup() },
+        title = { Text("Connection Status") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(320.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Current: ${state.connectionStep}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Divider()
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(state.connectionStatusLines) { line ->
+                        val color = when {
+                            line.startsWith("ERROR") -> MaterialTheme.colorScheme.error
+                            line.startsWith("SUCCESS") -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.onSurface
+                        }
+                        Text(
+                            text = line,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = color,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = vm::dismissConnectionPopup,
+                enabled = !state.busy
+            ) {
+                Text(if (state.busy) "Connecting..." else "Close")
+            }
+        }
+    )
+}
 }
