@@ -7,44 +7,43 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
-import android.os.Build
+import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
+private const val TAG = "UsbPermissionManager"
 private const val ACTION_USB_PERMISSION = "com.bmwe60coderpro.USB_PERMISSION"
 
 class UsbPermissionManager(private val context: Context) {
-    suspend fun ensurePermission(usbManager: UsbManager, device: UsbDevice): Boolean = withContext(Dispatchers.Main) {
-        if (usbManager.hasPermission(device)) return@withContext true
 
-        val result = CompletableDeferred<Boolean>()
+    suspend fun ensurePermission(usbManager: UsbManager, device: UsbDevice): Boolean {
+        if (usbManager.hasPermission(device)) {
+            Log.d(TAG, "Already has permission for ${device.deviceName}")
+            return true
+        }
+        Log.d(TAG, "Requesting permission for ${device.deviceName}")
+        val deferred = CompletableDeferred<Boolean>()
         val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context?, intent: Intent?) {
-                if (intent?.action == ACTION_USB_PERMISSION) {
-                    val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
-                    if (!result.isCompleted) result.complete(granted)
-                    runCatching { context.unregisterReceiver(this) }
-                }
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action != ACTION_USB_PERMISSION) return
+                val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
+                Log.d(TAG, "Permission result for ${device.deviceName}: $granted")
+                deferred.complete(granted)
             }
         }
-
-        val filter = IntentFilter(ACTION_USB_PERMISSION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("DEPRECATION")
-            context.registerReceiver(receiver, filter)
-        }
-
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
-        val permissionIntent = PendingIntent.getBroadcast(
-            context,
-            device.deviceId,
-            Intent(ACTION_USB_PERMISSION).setPackage(context.packageName),
-            flags,
+        context.registerReceiver(receiver, IntentFilter(ACTION_USB_PERMISSION))
+        val pendingIntent = PendingIntent.getBroadcast(
+            context, device.deviceId, Intent(ACTION_USB_PERMISSION),
+            PendingIntent.FLAG_IMMUTABLE
         )
-        usbManager.requestPermission(device, permissionIntent)
-        result.await()
+        try {
+            usbManager.requestPermission(device, pendingIntent)
+            return withTimeoutOrNull(30_000) { deferred.await() } ?: run {
+                Log.w(TAG, "Permission timeout for ${device.deviceName}")
+                false
+            }
+        } finally {
+            context.unregisterReceiver(receiver)
+        }
     }
 }
