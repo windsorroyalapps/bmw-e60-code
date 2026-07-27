@@ -589,9 +589,31 @@ class MainViewModel(private val application: Application) : ViewModel() {
     fun startControllerBridge() {
         if (controllerJob?.isActive == true) return
         controllerJob = viewModelScope.launch {
-            log("CTRL", "Controller bridge started (dryRun=${_state.value.controllerDryRun})")
+            val dryRun = _state.value.controllerDryRun
+            log("CTRL", "Controller bridge started (dryRun=$dryRun)")
             controllerTickCount = 0L
             controllerLastTickMs = System.currentTimeMillis()
+
+            // Initialize diagnostic sessions on DME and DSC
+            val activeSession = session
+            if (activeSession != null && _state.value.connected) {
+                val initResult = ControllerInjector.initSessions(activeSession, dryRun)
+                log("CTRL", "Session init: $initResult")
+                _state.value = _state.value.copy(controllerLastSummary = initResult)
+            }
+
+            // Keep-alive coroutine
+            val keepAliveJob = launch {
+                while (isActive) {
+                    val s = session
+                    if (s != null && _state.value.connected && !_state.value.controllerDryRun) {
+                        val ka = ControllerInjector.keepAlive(s, dryRun)
+                        if (!ka.contains("No keep-alive")) log("CTRL", ka)
+                    }
+                    delay(2000L)
+                }
+            }
+
             try {
                 while (true) {
                     val st = _state.value
@@ -612,10 +634,10 @@ class MainViewModel(private val application: Application) : ViewModel() {
 
                     // Inject into vehicle only when armed and connected
                     if (commands.hasActiveCommands && st.connected) {
-                        val activeSession = session
-                        if (activeSession != null) {
+                        val s = session
+                        if (s != null) {
                             val result = ControllerInjector.tick(
-                                session       = activeSession,
+                                session       = s,
                                 commands      = commands,
                                 sendThrottle  = st.controllerSendThrottle,
                                 sendSteering  = st.controllerSendSteering,
@@ -628,32 +650,28 @@ class MainViewModel(private val application: Application) : ViewModel() {
                             controllerTickCount++
                             val hz = "%.1f Hz".format(1000.0 / elapsed)
 
-                            if (controllerTickCount % 10L == 0L) { // log every 10 ticks
-                                val logLine = "${timestamp()} ${result.summary}"
-                                val newLog = (_state.value.controllerLog + logLine).takeLast(40)
-                                _state.value = _state.value.copy(
-                                    controllerLog    = newLog,
-                                    controllerTickHz = hz,
-                                )
-                            } else {
-                                _state.value = _state.value.copy(controllerTickHz = hz)
-                            }
+                            val logLine = "${timestamp()} ${result.summary}"
+                            val newLog = (_state.value.controllerLog + logLine).takeLast(40)
+                            _state.value = _state.value.copy(
+                                controllerLog    = newLog,
+                                controllerTickHz = hz,
+                            )
                         }
                     }
 
-                    delay(20L) // 50 Hz target loop — fast enough for smooth feel on K-line
+                    delay(100L) // 10 Hz — K-line safe cadence
                 }
             } catch (e: CancellationException) {
                 // normal stop
             } catch (t: Throwable) {
                 log("CTRL", "Bridge error: ${t.message ?: t.javaClass.simpleName}")
             } finally {
+                keepAliveJob.cancel()
                 _state.value = _state.value.copy(controllerArmed = false)
                 log("CTRL", "Controller bridge stopped")
             }
         }
     }
-
     fun stopControllerBridge() {
         controllerJob?.cancel()
         controllerJob = null
@@ -1172,7 +1190,6 @@ class MainViewModel(private val application: Application) : ViewModel() {
             }
     }
 }
-
 
 
 
