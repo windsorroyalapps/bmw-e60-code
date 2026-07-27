@@ -37,6 +37,24 @@ class KdcanSession(
         return HexUtils.bytesToHex(response)
     }
 
+    /**
+     * Build and send a raw KWP frame to an arbitrary target without changing session state.
+     * Used for real-time controller injection where we must not switch the session target.
+     */
+    suspend fun sendRawFrame(targetAddress: Int, serviceId: Int, payload: List<Int>): String {
+        val data = mutableListOf(serviceId and 0xFF)
+        data.addAll(payload.map { it and 0xFF })
+        val format = 0x80 or (data.size and 0x3F)
+        val withoutChecksum = mutableListOf(format, targetAddress and 0xFF, testerAddress and 0xFF)
+        withoutChecksum.addAll(data)
+        val checksum = withoutChecksum.sumOf { it and 0xFF } and 0xFF
+        val frame = withoutChecksum.plus(checksum).map { (it and 0xFF).toByte() }.toByteArray()
+        transport.write(frame)
+        delay(commProfile.interFrameDelayMs)
+        val response = transport.read(commProfile.requestTimeoutMs)
+        return HexUtils.bytesToHex(response)
+    }
+
     suspend fun tryIdentify(): String {
         val start = runCatching { execute(BmwJobs.byId("start_session_default") ?: error("Job not found: start_session_default")) }.getOrNull()
         val id = runCatching { execute(BmwJobs.byId("ecu_id_9A") ?: error("Job not found: ecu_id_9A")) }.getOrNull()
