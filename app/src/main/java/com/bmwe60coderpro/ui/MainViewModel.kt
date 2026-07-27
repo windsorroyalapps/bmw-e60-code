@@ -219,34 +219,67 @@ class MainViewModel(private val application: Application) : ViewModel() {
         _state.value = _state.value.copy(selectedJobId = id)
     }
 
+
+    private fun pushConnectionStatus(line: String) {
+        _state.value = _state.value.copy(
+            connectionStatusLines = _state.value.connectionStatusLines + line,
+            connectionStep = line,
+        )
+    }
+
+    private fun clearConnectionStatus() {
+        _state.value = _state.value.copy(
+            showConnectionPopup = true,
+            connectionStatusLines = emptyList(),
+            connectionStep = "Starting connection...",
+        )
+    }
+
+    fun dismissConnectionPopup() {
+        _state.value = _state.value.copy(showConnectionPopup = false)
+    }
     fun connect() {
         connectJob?.cancel()
         connectJob = viewModelScope.launch {
             runBusy {
+                clearConnectionStatus()
+                pushConnectionStatus("Stopping any active polling...")
                 stopPollingInternal(false)
+                pushConnectionStatus("Disconnecting previous transport...")
                 transport?.disconnect()
+                pushConnectionStatus("Building transport (${_state.value.profile.transport.name})...")
                 transport = buildTransport(_state.value.profile)
                 val currentTransport = transport
                 if (currentTransport == null) {
+                    pushConnectionStatus("ERROR: Transport initialization failed")
                     _state.value = _state.value.copy(dashboardStatus = "Transport init failed")
                     return@runBusy
                 }
+                pushConnectionStatus("Transport ready. Opening connection...")
                 try {
                     currentTransport.connect(_state.value.selectedDeviceId)
                 } catch (e: Exception) {
+                    pushConnectionStatus("ERROR: ${e.message}")
                     _state.value = _state.value.copy(dashboardStatus = "Connect failed: ${e.message}")
                     log("ERROR", "Transport connect failed: ${e.message}")
                     return@runBusy
                 }
                 if (!currentTransport.isConnected()) {
+                    pushConnectionStatus("ERROR: Transport open failed (isConnected() = false)")
                     _state.value = _state.value.copy(dashboardStatus = "Transport not connected after open")
                     log("ERROR", "Transport isConnected() returned false after connect()")
                     return@runBusy
                 }
+                pushConnectionStatus("Transport connected. Starting K+DCAN session...")
                 val newSession = KdcanSession(currentTransport, currentTarget(), _state.value.profile.vehicleProfile)
+                pushConnectionStatus("Session created. Settling (${_state.value.profile.settleDelayMs}ms)...")
                 newSession.onConnected(_state.value.profile.settleDelayMs)
+                pushConnectionStatus("Reading communication profile...")
                 val profile = newSession.getCommProfile()
+                pushConnectionStatus("Profile: ${profile.name}")
+                pushConnectionStatus("Identifying ECU (${currentTarget().name})...")
                 val vehicleInfo = newSession.tryIdentify()
+                pushConnectionStatus("ECU response: $vehicleInfo")
                 session = newSession
                 _state.value = _state.value.copy(
                     connected = true,
@@ -255,6 +288,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                     activeVehicleProfile = E60AddressBook.byKind(_state.value.profile.vehicleProfile).label,
                     dashboardStatus = "Connected, polling stopped",
                 )
+                pushConnectionStatus("SUCCESS: Connected to ${currentTarget().name}")
                 log("INFO", "Connected to ${currentTarget().name}")
             }
         }
@@ -1138,7 +1172,6 @@ class MainViewModel(private val application: Application) : ViewModel() {
             }
     }
 }
-
 
 
 
