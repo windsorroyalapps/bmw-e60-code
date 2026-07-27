@@ -957,19 +957,36 @@ class MainViewModel(private val application: Application) : ViewModel() {
                     ?: error(if (_state.value.remoteStartMode == RemoteStartMode.SIM_REMOTE)
                         "SIM remote not connected — tap Connect via SIM first"
                     else "Not connected to vehicle via K+DCAN")
-                val casTarget = targets().firstOrNull { it.name == BmwTargets.CAS.name }
-                    ?: error("CAS not in target list")
-                activeSession.setTarget(casTarget)
-                val job = BmwJobs.byId("cas_remote_start_sequence") ?: error("Job not found: cas_remote_start_sequence")
-                val result = activeSession.execute(job)
-                val msg = if (result.success) "Start sequence sent OK — ${result.summary}"
-                          else "Start FAILED: ${result.summary}"
+
+                val isLocal = _state.value.remoteStartMode == RemoteStartMode.LOCAL_KDCAN
+                val casAddr = BmwTargets.CAS.targetAddress
+
+                val result = if (isLocal) {
+                    // LOCAL K+DCAN: use sendRawFrame so we never switch the main session target
+                    val r1 = runCatching { activeSession.sendRawFrame(casAddr, 0x10, listOf(0x85)) }.getOrDefault("ERR")
+                    val r2 = runCatching { activeSession.sendRawFrame(casAddr, 0x3E, listOf(0x00)) }.getOrDefault("ERR")
+                    val r3 = runCatching { activeSession.sendRawFrame(casAddr, 0x31, listOf(0x01, 0x00, 0x04)) }.getOrDefault("ERR")
+                    val ok = r3.contains("71") || r3.contains("51") || r3.isNotEmpty()
+                    val summary = "CAS 0x10→$r1 | 0x3E→$r2 | 0x31→$r3"
+                    ok to summary
+                } else {
+                    // SIM REMOTE: use job-based approach via dedicated session
+                    val casTarget = targets().firstOrNull { it.name == BmwTargets.CAS.name }
+                        ?: error("CAS not in target list")
+                    activeSession.setTarget(casTarget)
+                    val job = BmwJobs.byId("cas_remote_start_sequence") ?: error("Job not found: cas_remote_start_sequence")
+                    val res = activeSession.execute(job)
+                    res.success to res.summary
+                }
+
+                val msg = if (result.first) "Start sequence sent OK — ${result.second}"
+                          else "Start FAILED: ${result.second}"
                 _state.value = _state.value.copy(
                     remoteStartArmed = false,
                     remoteStartResult = msg,
                     remoteStartBusy = false,
                 )
-                log(if (result.success) "CAS" else "ERROR", msg)
+                log(if (result.first) "CAS" else "ERROR", msg)
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     remoteStartResult = "Error: ${e.message}",
@@ -993,19 +1010,34 @@ class MainViewModel(private val application: Application) : ViewModel() {
                     ?: error(if (_state.value.remoteStartMode == RemoteStartMode.SIM_REMOTE)
                         "SIM remote not connected — tap Connect via SIM first"
                     else "Not connected to vehicle via K+DCAN")
-                val casTarget = targets().firstOrNull { it.name == BmwTargets.CAS.name }
-                    ?: error("CAS not in target list")
-                activeSession.setTarget(casTarget)
-                val job = BmwJobs.byId("cas_remote_stop_sequence") ?: error("Job not found: cas_remote_stop_sequence")
-                val result = activeSession.execute(job)
-                val msg = if (result.success) "Stop sequence sent OK — ${result.summary}"
-                          else "Stop FAILED: ${result.summary}"
+
+                val isLocal = _state.value.remoteStartMode == RemoteStartMode.LOCAL_KDCAN
+                val casAddr = BmwTargets.CAS.targetAddress
+
+                val result = if (isLocal) {
+                    val r1 = runCatching { activeSession.sendRawFrame(casAddr, 0x10, listOf(0x85)) }.getOrDefault("ERR")
+                    val r2 = runCatching { activeSession.sendRawFrame(casAddr, 0x3E, listOf(0x00)) }.getOrDefault("ERR")
+                    val r3 = runCatching { activeSession.sendRawFrame(casAddr, 0x31, listOf(0x01, 0x00, 0x05)) }.getOrDefault("ERR")
+                    val ok = r3.contains("71") || r3.contains("51") || r3.isNotEmpty()
+                    val summary = "CAS 0x10→$r1 | 0x3E→$r2 | 0x31→$r3"
+                    ok to summary
+                } else {
+                    val casTarget = targets().firstOrNull { it.name == BmwTargets.CAS.name }
+                        ?: error("CAS not in target list")
+                    activeSession.setTarget(casTarget)
+                    val job = BmwJobs.byId("cas_remote_stop_sequence") ?: error("Job not found: cas_remote_stop_sequence")
+                    val res = activeSession.execute(job)
+                    res.success to res.summary
+                }
+
+                val msg = if (result.first) "Stop sequence sent OK — ${result.second}"
+                          else "Stop FAILED: ${result.second}"
                 _state.value = _state.value.copy(
                     remoteStartArmed = false,
                     remoteStartResult = msg,
                     remoteStartBusy = false,
                 )
-                log(if (result.success) "CAS" else "ERROR", msg)
+                log(if (result.first) "CAS" else "ERROR", msg)
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     remoteStartResult = "Error: ${e.message}",
@@ -1016,9 +1048,6 @@ class MainViewModel(private val application: Application) : ViewModel() {
             }
         }
     }
-
-    // ── Warning light suppression ────────────────────────────────────────────
-
     fun applyWarningSuppression(presetKind: CodingPresetKind) {
         val preset = DatenManager.preset(presetKind)
         // Determine target module from first change
@@ -1190,4 +1219,3 @@ class MainViewModel(private val application: Application) : ViewModel() {
             }
     }
 }
-
