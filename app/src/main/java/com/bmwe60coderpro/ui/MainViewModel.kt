@@ -229,6 +229,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                     _state.value = _state.value.copy(dashboardStatus = "Transport init failed")
                     return@launch
                 }
+                currentTransport.connect(_state.value.selectedDeviceId)
                 val newSession = KdcanSession(currentTransport, currentTarget(), _state.value.profile.vehicleProfile)
                 newSession.onConnected(_state.value.profile.settleDelayMs)
                 val profile = newSession.getCommProfile()
