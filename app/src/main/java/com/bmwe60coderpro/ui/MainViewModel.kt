@@ -73,6 +73,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
     private var transport: Transport? = null
     private var session: KdcanSession? = null
     private var pollingJob: Job? = null
+    private var connectJob: Job? = null
     // Separate session used for SIM remote start — does not share the main K+DCAN session
     private var simSession: KdcanSession? = null
     private var simTransport: SimRemoteTransport? = null
@@ -219,7 +220,8 @@ class MainViewModel(private val application: Application) : ViewModel() {
     }
 
     fun connect() {
-        viewModelScope.launch {
+        connectJob?.cancel()
+        connectJob = viewModelScope.launch {
             runBusy {
                 stopPollingInternal(false)
                 transport?.disconnect()
@@ -227,9 +229,20 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 val currentTransport = transport
                 if (currentTransport == null) {
                     _state.value = _state.value.copy(dashboardStatus = "Transport init failed")
-                    return@launch
+                    return@runBusy
                 }
-                currentTransport.connect(_state.value.selectedDeviceId)
+                try {
+                    currentTransport.connect(_state.value.selectedDeviceId)
+                } catch (e: Exception) {
+                    _state.value = _state.value.copy(dashboardStatus = "Connect failed: ${e.message}")
+                    log("ERROR", "Transport connect failed: ${e.message}")
+                    return@runBusy
+                }
+                if (!currentTransport.isConnected()) {
+                    _state.value = _state.value.copy(dashboardStatus = "Transport not connected after open")
+                    log("ERROR", "Transport isConnected() returned false after connect()")
+                    return@runBusy
+                }
                 val newSession = KdcanSession(currentTransport, currentTarget(), _state.value.profile.vehicleProfile)
                 newSession.onConnected(_state.value.profile.settleDelayMs)
                 val profile = newSession.getCommProfile()
@@ -248,6 +261,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
     }
 
     fun disconnect() {
+        connectJob?.cancel()
         viewModelScope.launch {
             stopControllerBridge()
             stopSzlMonitor()
@@ -1124,7 +1138,6 @@ class MainViewModel(private val application: Application) : ViewModel() {
             }
     }
 }
-
 
 
 
