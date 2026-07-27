@@ -589,15 +589,14 @@ class MainViewModel(private val application: Application) : ViewModel() {
     fun startControllerBridge() {
         if (controllerJob?.isActive == true) return
         controllerJob = viewModelScope.launch {
-            val dryRun = _state.value.controllerDryRun
-            log("CTRL", "Controller bridge started (dryRun=$dryRun)")
+            log("CTRL", "Controller bridge started")
             controllerTickCount = 0L
             controllerLastTickMs = System.currentTimeMillis()
 
             // Initialize diagnostic sessions on DME and DSC
             val activeSession = session
             if (activeSession != null && _state.value.connected) {
-                val initResult = ControllerInjector.initSessions(activeSession, dryRun)
+                val initResult = ControllerInjector.initSessions(activeSession)
                 log("CTRL", "Session init: $initResult")
                 _state.value = _state.value.copy(controllerLastSummary = initResult)
             }
@@ -606,8 +605,8 @@ class MainViewModel(private val application: Application) : ViewModel() {
             val keepAliveJob = launch {
                 while (true) {
                     val s = session
-                    if (s != null && _state.value.connected && !_state.value.controllerDryRun) {
-                        val ka = ControllerInjector.keepAlive(s, dryRun)
+                    if (s != null && _state.value.connected) {
+                        val ka = ControllerInjector.keepAlive(s)
                         if (!ka.contains("No keep-alive")) log("CTRL", ka)
                     }
                     delay(2000L)
@@ -642,7 +641,6 @@ class MainViewModel(private val application: Application) : ViewModel() {
                                 sendThrottle  = st.controllerSendThrottle,
                                 sendSteering  = st.controllerSendSteering,
                                 sendBrake     = st.controllerSendBrake,
-                                dryRun        = st.controllerDryRun,
                             )
                             val nowMs = System.currentTimeMillis()
                             val elapsed = (nowMs - controllerLastTickMs).coerceAtLeast(1L)
@@ -692,7 +690,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
             if (activeSession != null) {
                 val result = ControllerInjector.emergencyStop(
                     session = activeSession,
-                    dryRun  = _state.value.controllerDryRun,
+                    
                 )
                 log("CTRL", "E-STOP: ${result.summary}")
             } else {
@@ -712,7 +710,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 label      = if (up) "Paddle▶" else "◀Paddle",
                 kwpPayload = listOf(0xA0, 0x03, code),
             )
-            com.bmwe60coderpro.protocol.MflInjector.inject(activeSession, event, _state.value.controllerDryRun)
+            com.bmwe60coderpro.protocol.MflInjector.inject(activeSession, event, false)
         }
     }
 
