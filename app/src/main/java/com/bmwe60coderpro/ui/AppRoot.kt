@@ -1117,6 +1117,8 @@ private fun DecodedPayloadCard(decodedFields: Map<String, String>) {
         }
     }
 
+}
+
 @Composable
 private fun ConnectionStatusPopup(state: AppState, vm: MainViewModel) {
     AlertDialog(
@@ -1164,5 +1166,4 @@ private fun ConnectionStatusPopup(state: AppState, vm: MainViewModel) {
             }
         }
     )
-}
 }
