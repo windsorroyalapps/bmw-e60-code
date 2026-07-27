@@ -112,8 +112,10 @@ fun AppRoot(vm: MainViewModel) {
                 item { VehicleProfileCard(state, vm, selectedVehicleProfile.label, selectedVehicleProfile.notes) }
                 item { AdapterPresetCard(state, vm, selectedPreset.label, selectedPreset.notes) }
                 item { TransportCard(state = state, vm = vm) }
-                if (state.showConnectionPopup) {
-                    item { ConnectionStatusPopup(state = state, vm = vm) }
+                item {
+                    if (state.showConnectionPopup) {
+                        ConnectionStatusPopup(state = state, vm = vm)
+                    }
                 }
                 item { OverviewJobsCard(state, vm, rawHexState.value, { rawHexState.value = it }) }
             }
@@ -135,8 +137,10 @@ fun AppRoot(vm: MainViewModel) {
             ServiceScreen.EXPERIMENTS -> item { ExperimentalScreen(state, vm) }
             else -> {
                 item { TransportCompactCard(state = state, vm = vm) }
-                if (state.showConnectionPopup) {
-                    item { ConnectionStatusPopup(state = state, vm = vm) }
+                item {
+                    if (state.showConnectionPopup) {
+                        ConnectionStatusPopup(state = state, vm = vm)
+                    }
                 }
                 item {
                     DedicatedServiceModuleCard(
