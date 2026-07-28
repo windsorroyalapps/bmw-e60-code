@@ -219,8 +219,8 @@ data class AppState(
     val controllerTickHz: String = "—",
     // Force ignition ON during connect
     val forceIgnitionOn: Boolean = false,
-    val ignitionStatus: String = ,
     val ignitionStatus: String = "",
+    val fuelMap: TuningMap? = null,
     val ignitionMap: TuningMap? = null,
     val tuningLiveBusy: Boolean = false,
     val tuningReadResult: String = "",
