@@ -1348,6 +1348,13 @@ private fun TransportCard(state: AppState, vm: MainViewModel) {
             Text("Connect timeout: ${state.profile.connectTimeoutMs} ms")
             Text("Read timeout: ${state.profile.readTimeoutMs} ms")
             Text("Adapter settle delay: ${state.profile.settleDelayMs} ms")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = state.forceIgnitionOn, onCheckedChange = { vm.setForceIgnitionOn(it) })
+                Text("Force ignition ON", style = MaterialTheme.typography.bodySmall)
+            }
+            if (state.ignitionStatus.isNotEmpty()) {
+                Text("Ignition: ${state.ignitionStatus}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = vm::refreshDevices) { Text("Scan") }
                 Button(onClick = vm::connect, enabled = !state.connected && !state.busy) { Text("Connect") }
@@ -1368,6 +1375,13 @@ private fun TransportCompactCard(state: AppState, vm: MainViewModel) {
             Text(if (state.connected) "Connected" else "Disconnected")
             Text("Vehicle profile: ${state.activeVehicleProfile}")
             Text("Comm profile: ${state.activeCommProfile}")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = state.forceIgnitionOn, onCheckedChange = { vm.setForceIgnitionOn(it) })
+                Text("Force ignition ON", style = MaterialTheme.typography.bodySmall)
+            }
+            if (state.ignitionStatus.isNotEmpty()) {
+                Text("Ignition: ${state.ignitionStatus}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = vm::refreshDevices) { Text("Scan") }
                 Button(onClick = vm::connect, enabled = !state.connected && !state.busy) { Text("Connect") }
