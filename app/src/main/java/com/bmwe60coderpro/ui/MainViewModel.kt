@@ -241,6 +241,35 @@ class MainViewModel(private val application: Application) : ViewModel() {
     fun dismissConnectionPopup() {
         _state.value = _state.value.copy(showConnectionPopup = false)
     }
+    /**
+     * Force ignition ON via CAS (0x40) using RoutineControl 0x31 routine 0x0001.
+     * Sends raw frames so the main session target is never switched.
+     */
+    private suspend fun forceIgnitionOnCAS(session: KdcanSession) {
+        pushConnectionStatus("Forcing ignition ON via CAS...")
+        val casAddr = BmwTargets.CAS.targetAddress
+        try {
+            val r1 = runCatching { session.sendRawFrame(casAddr, 0x10, listOf(0x03)) }.getOrDefault("ERR")
+            pushConnectionStatus("  CAS 0x10 0x03 → $r1")
+            delay(40)
+            val r2 = runCatching { session.sendRawFrame(casAddr, 0x3E, listOf(0x00)) }.getOrDefault("ERR")
+            pushConnectionStatus("  CAS 0x3E 0x00 → $r2")
+            delay(40)
+            val r3 = runCatching { session.sendRawFrame(casAddr, 0x31, listOf(0x01, 0x00, 0x01)) }.getOrDefault("ERR")
+            pushConnectionStatus("  CAS 0x31 0x01 0x00 0x01 → $r3")
+            val ok = r3.contains("71") || r3.contains("51") || (r3.isNotEmpty() && !r3.contains("7F"))
+            val status = if (ok) "Ignition ON — CAS accepted routine 0x0001" else "Ignition command sent — CAS response: $r3"
+            _state.value = _state.value.copy(ignitionStatus = status)
+            pushConnectionStatus(status)
+            log("CAS", status)
+        } catch (e: Exception) {
+            val err = "Ignition force failed: ${e.message}"
+            _state.value = _state.value.copy(ignitionStatus = err)
+            pushConnectionStatus("ERROR: $err")
+            log("ERROR", err)
+        }
+    }
+
     fun connect() {
         connectJob?.cancel()
         connectJob = viewModelScope.launch {
@@ -292,6 +321,11 @@ class MainViewModel(private val application: Application) : ViewModel() {
                     dashboardStatus = "Connected, polling stopped",
                 )
                 pushConnectionStatus("SUCCESS: Connected to ${currentTarget().name}")
+
+                // Force ignition ON if requested
+                if (_state.value.forceIgnitionOn) {
+                    forceIgnitionOnCAS(newSession)
+                }
                 log("INFO", "Connected to ${currentTarget().name}")
             }
         }
@@ -602,6 +636,10 @@ class MainViewModel(private val application: Application) : ViewModel() {
 
     fun setControllerThrottleCeiling(pct: Float) {
         _state.value = _state.value.copy(controllerThrottleCeiling = pct.coerceIn(0f, 1f))
+    }
+
+    fun setForceIgnitionOn(v: Boolean) {
+        _state.value = _state.value.copy(forceIgnitionOn = v)
     }
 
     fun scanController() {
