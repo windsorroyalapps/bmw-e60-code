@@ -372,10 +372,44 @@ class MainViewModel(private val application: Application) : ViewModel() {
     }
 
     fun scanBluetoothDevices() {
-        _state.value = _state.value.copy(
-            bluetoothDevices = listOf("Pair Vgate in Android Settings" to ""),
-            dashboardStatus = "Pair Vgate adapter in Android Bluetooth settings, then enter MAC"
-        )
+        _state.value = _state.value.copy(bluetoothScanning = true)
+        viewModelScope.launch {
+            try {
+                val adapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+                if (adapter == null || !adapter.isEnabled) {
+                    _state.value = _state.value.copy(
+                        bluetoothScanning = false,
+                        dashboardStatus = "Bluetooth is disabled. Enable it in Android settings."
+                    )
+                    return@launch
+                }
+
+                val bonded = adapter.bondedDevices?.map { 
+                    (it.name ?: "Unknown") to it.address 
+                } ?: emptyList()
+
+                _state.value = _state.value.copy(
+                    bluetoothDevices = bonded,
+                    bluetoothScanning = false,
+                    dashboardStatus = "Found ${bonded.size} paired Bluetooth devices"
+                )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    bluetoothScanning = false,
+                    dashboardStatus = "Bluetooth scan failed: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun checkBluetoothPermissions(): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                application, android.Manifest.permission.BLUETOOTH_CONNECT
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
     }
 
     fun readKeySlotDetail(slotNumber: Int) {

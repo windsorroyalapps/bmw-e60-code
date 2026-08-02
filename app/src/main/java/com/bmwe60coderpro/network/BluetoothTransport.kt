@@ -86,19 +86,13 @@ class BluetoothTransport(
     }
 
     override fun readWithTimeout(timeoutMs: Int): ByteArray? {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        val buffer = mutableListOf<Byte>()
-        while (System.currentTimeMillis() < deadline) {
-            val chunk = receive()
-            if (chunk != null) {
-                chunk.forEach { buffer.add(it) }
-                if (chunk.isNotEmpty() && chunk.last() == '>'.code.toByte()) {
-                    break
-                }
-            } else {
-                Thread.sleep(5)
-            }
+        return try {
+            socket?.soTimeout = timeoutMs
+            val buffer = ByteArray(4096)
+            val read = inputStream?.read(buffer) ?: 0
+            if (read > 0) buffer.copyOf(read) else null
+        } catch (e: Exception) {
+            null
         }
-        return if (buffer.isNotEmpty()) buffer.toByteArray() else null
     }
 }

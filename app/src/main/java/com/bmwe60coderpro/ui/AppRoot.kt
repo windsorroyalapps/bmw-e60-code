@@ -1391,7 +1391,19 @@ private fun TransportCard(state: AppState, vm: MainViewModel) {
                         onClick = { vm.scanBluetoothDevices() },
                         enabled = !state.bluetoothScanning
                     ) {
-                        Text("Scan for Vgate")
+                        Text(if (state.bluetoothScanning) "Scanning..." else "Scan Paired Devices")
+                    }
+
+                    if (state.bluetoothDevices.isNotEmpty()) {
+                        Text("Paired devices:", fontWeight = FontWeight.Bold)
+                        state.bluetoothDevices.forEach { (name, mac) ->
+                            TextButton(
+                                onClick = { vm.setBluetoothMac(mac) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("$name — $mac")
+                            }
+                        }
                     }
                 }
             }
