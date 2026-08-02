@@ -27,7 +27,6 @@ enum class ServiceScreen {
     CAS,
     FRM,
     ACSM,
-    KEYS,
     CODING,
     TUNING,
     CCC,

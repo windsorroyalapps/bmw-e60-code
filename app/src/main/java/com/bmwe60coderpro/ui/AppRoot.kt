@@ -152,7 +152,6 @@ fun AppRoot(vm: MainViewModel) {
                     vm.updateFlashInputHex(it)
                 })
             }
-            ServiceScreen.KEYS -> item { KeysScreen(state, vm) }
             ServiceScreen.EXPERIMENTS -> item { ExperimentalScreen(state, vm) }
             ServiceScreen.GAUGES -> item { GaugesScreen(state, vm) }
             else -> {
@@ -1007,165 +1006,6 @@ private fun GaugeBox(label: String, value: String, unit: String, modifier: Modif
 
 
 @Composable
-private fun KeysScreen(state: AppState, vm: MainViewModel) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Key Code Reading", style = MaterialTheme.typography.titleLarge)
-            Text("Read ISN, key slot data, and key IDs directly from module memory. No key required.")
-
-            Button(
-                onClick = { vm.readKeyData() },
-                enabled = !state.keyDataBusy && state.connected,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (state.keyDataBusy) "Reading..." else "Read All Key Data")
-            }
-
-            if (state.keyDataError.isNotEmpty()) {
-                Text("Error: ${state.keyDataError}", color = Color.Red)
-            }
-
-            state.keyDataResult?.let { result ->
-                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("ISN: ${result.isn}", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                        Text("VIN: ${result.vin}", fontFamily = FontFamily.Monospace)
-                        Text("Module: ${result.moduleVersion}", fontFamily = FontFamily.Monospace)
-                        Text("Key count: ${result.keyCount}", fontFamily = FontFamily.Monospace)
-
-                        if (result.keySlots.isNotEmpty()) {
-                            Text("Select Key Slot for Detail:", fontWeight = FontWeight.Bold)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                result.keySlots.forEach { slot ->
-                                    val isSelected = state.selectedKeySlot == slot.slotNumber
-                                    Button(
-                                        onClick = { vm.selectKeySlot(slot.slotNumber) },
-                                        modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                                            contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    ) {
-                                        Text("${slot.slotNumber}")
-                                    }
-                                }
-                            }
-
-                            // Show slot summary
-                            result.keySlots.forEach { slot ->
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text("Slot ${slot.slotNumber}", fontFamily = FontFamily.Monospace)
-                                    when {
-                                        slot.keyPresent -> Text(
-                                            "✓ Key present",
-                                            color = Color(0xFF4CAF50),
-                                            fontFamily = FontFamily.Monospace
-                                        )
-                                        slot.hasModuleData -> Text(
-                                            "◌ Programmed (no key)",
-                                            color = Color(0xFF2196F3),
-                                            fontFamily = FontFamily.Monospace
-                                        )
-                                        else -> Text(
-                                            "✗ Empty",
-                                            color = Color.Gray,
-                                            fontFamily = FontFamily.Monospace
-                                        )
-                                    }
-                                }
-                                if (slot.keyId.isNotEmpty()) {
-                                    Text("  ID: ${slot.keyId}", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                                }
-                                if (slot.hasModuleData && !slot.keyPresent) {
-                                    Text("  ${slot.moduleDataStatus}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFF2196F3))
-                                }
-                            }
-                        }
-
-                        if (result.rawKeyData.isNotEmpty()) {
-                            Text("Raw Data:", fontWeight = FontWeight.Bold)
-                            Text(result.rawKeyData, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
-                        }
-
-                        OutlinedButton(
-                            onClick = { vm.exportKeyData() },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text("Export Key Data (No Key Required)")
-                        }
-                    }
-                }
-
-                // Key Slot Detail Section
-                if (state.selectedKeySlot > 0) {
-                    Spacer(Modifier.height(8.dp))
-                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Key Slot ${state.selectedKeySlot} Detail", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-
-                            Button(
-                                onClick = { vm.readKeySlotDetail(state.selectedKeySlot) },
-                                enabled = !state.keySlotDetailBusy && state.connected,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(if (state.keySlotDetailBusy) "Reading Slot ${state.selectedKeySlot}..." else "Read Slot ${state.selectedKeySlot} Detail")
-                            }
-
-                            if (state.keySlotDetailError.isNotEmpty()) {
-                                Text("Error: ${state.keySlotDetailError}", color = Color.Red)
-                            }
-
-                            state.keySlotDetail?.let { detail ->
-                                if (detail.slotNumber == state.selectedKeySlot) {
-                                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            Text("Key ID: ${detail.keyId}", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                                            Text("Transponder: ${detail.transponderType}", fontFamily = FontFamily.Monospace)
-                                            Text("Transponder ID: ${detail.transponderId}", fontFamily = FontFamily.Monospace)
-                                            Text("Key Track: ${detail.keyTrack}", fontFamily = FontFamily.Monospace)
-                                            Text("Status: ${detail.keyStatus}", fontFamily = FontFamily.Monospace)
-                                            Text("Valid: ${if (detail.isValid) "Yes" else "No"}", fontFamily = FontFamily.Monospace)
-
-                                            if (detail.keyDataHex.isNotEmpty()) {
-                                                Text("Key Data (Hex):", fontWeight = FontWeight.Bold)
-                                                Text(detail.keyDataHex, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
-                                            }
-
-                                            if (detail.rawResponse.isNotEmpty()) {
-                                                Text("Raw Response:", fontWeight = FontWeight.Bold)
-                                                Text(detail.rawResponse, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
-                                            }
-
-                                            OutlinedButton(
-                                                onClick = { vm.exportKeySlotDetail() },
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                Text("Export Slot ${detail.slotNumber} for New Key (No Key Required)")
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } ?: run {
-                if (!state.keyDataBusy && state.keyDataError.isEmpty()) {
-                    Text("Press 'Read All Key Data' to fetch information from the vehicle.", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-
-            if (!state.connected) {
-                Text("Connect to vehicle first.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-    }
-}
-
-@Composable
 private fun ExperimentalScreen(state: AppState, vm: MainViewModel) {
     val isRunning = state.controllerArmed || state.controllerTickHz != "—"
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1592,6 +1432,162 @@ private fun DedicatedServiceModuleCard(vm: MainViewModel, state: AppState, def: 
                     }
                 }
             }
+
+            // Key data section for CAS screen
+            if (def.screen == ServiceScreen.CAS) {
+                Divider(Modifier.padding(vertical = 8.dp))
+                Text("Key Data (No Key Required)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                Button(
+                    onClick = { vm.readKeyData() },
+                    enabled = !state.keyDataBusy && state.connected,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (state.keyDataBusy) "Reading..." else "Read All Key Data")
+                }
+
+                if (state.keyDataError.isNotEmpty()) {
+                    Text("Error: ${state.keyDataError}", color = Color.Red)
+                }
+
+                state.keyDataResult?.let { result ->
+                    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("ISN: ${result.isn}", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                            Text("VIN: ${result.vin}", fontFamily = FontFamily.Monospace)
+                            Text("Module: ${result.moduleVersion}", fontFamily = FontFamily.Monospace)
+                            Text("Key count: ${result.keyCount}", fontFamily = FontFamily.Monospace)
+
+                            if (result.keySlots.isNotEmpty()) {
+                                Text("Select Key Slot:", fontWeight = FontWeight.Bold)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    result.keySlots.forEach { slot ->
+                                        val isSelected = state.selectedKeySlot == slot.slotNumber
+                                        Button(
+                                            onClick = { vm.selectKeySlot(slot.slotNumber) },
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                                                contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        ) {
+                                            Text("${slot.slotNumber}")
+                                        }
+                                    }
+                                }
+
+                                result.keySlots.forEach { slot ->
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        Text("Slot ${slot.slotNumber}", fontFamily = FontFamily.Monospace)
+                                        when {
+                                            slot.keyPresent -> Text(
+                                                "✓ Key present",
+                                                color = Color(0xFF4CAF50),
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                            slot.hasModuleData -> Text(
+                                                "◌ Programmed (no key)",
+                                                color = Color(0xFF2196F3),
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                            else -> Text(
+                                                "✗ Empty",
+                                                color = Color.Gray,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                        }
+                                    }
+                                    if (slot.keyId.isNotEmpty()) {
+                                        Text("  ID: ${slot.keyId}", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                                    }
+                                    if (slot.hasModuleData && !slot.keyPresent) {
+                                        Text("  ${slot.moduleDataStatus}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFF2196F3))
+                                    }
+                                }
+                            }
+
+                            if (result.rawKeyData.isNotEmpty()) {
+                                Text("Raw Data:", fontWeight = FontWeight.Bold)
+                                Text(result.rawKeyData, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                            }
+
+                            OutlinedButton(
+                                onClick = { vm.exportKeyData() },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Export Key Data")
+                            }
+                        }
+                    }
+
+                    // Key Slot Detail Section
+                    if (state.selectedKeySlot > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Text("Key Slot ${state.selectedKeySlot} Detail", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+
+                                Button(
+                                    onClick = { vm.readKeySlotDetail(state.selectedKeySlot) },
+                                    enabled = !state.keySlotDetailBusy && state.connected,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(if (state.keySlotDetailBusy) "Reading Slot ${state.selectedKeySlot}..." else "Read Slot ${state.selectedKeySlot} Detail")
+                                }
+
+                                if (state.keySlotDetailError.isNotEmpty()) {
+                                    Text("Error: ${state.keySlotDetailError}", color = Color.Red)
+                                }
+
+                                state.keySlotDetail?.let { detail ->
+                                    if (detail.slotNumber == state.selectedKeySlot) {
+                                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Text("Key ID: ${detail.keyId}", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                                                Text("Transponder: ${detail.transponderType}", fontFamily = FontFamily.Monospace)
+                                                Text("Transponder ID: ${detail.transponderId}", fontFamily = FontFamily.Monospace)
+                                                Text("Key Track: ${detail.keyTrack}", fontFamily = FontFamily.Monospace)
+                                                Text("Status: ${detail.keyStatus}", fontFamily = FontFamily.Monospace)
+                                                Text("Valid: ${if (detail.isValid) "Yes" else "No"}", fontFamily = FontFamily.Monospace)
+
+                                                if (detail.keyDataHex.isNotEmpty()) {
+                                                    Text("Key Data (Hex):", fontWeight = FontWeight.Bold)
+                                                    Text(detail.keyDataHex, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                                                }
+
+                                                if (detail.rawResponse.isNotEmpty()) {
+                                                    Text("Raw Response:", fontWeight = FontWeight.Bold)
+                                                    Text(detail.rawResponse, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                                                }
+
+                                                OutlinedButton(
+                                                    onClick = { vm.exportKeySlotDetail() },
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text("Export Slot ${detail.slotNumber} for New Key")
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } ?: run {
+                    if (!state.keyDataBusy && state.keyDataError.isEmpty()) {
+                        Text("Press 'Read All Key Data' to fetch key information from module memory.", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+
+                if (!state.connected) {
+                    Text("Connect to vehicle first.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
+                }
+                Divider(Modifier.padding(vertical = 8.dp))
+            }
+
             if (snapshot == null) {
                 Text("No data captured for this module yet")
             } else {
