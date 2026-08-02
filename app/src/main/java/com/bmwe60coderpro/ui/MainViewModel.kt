@@ -237,7 +237,6 @@ class MainViewModel(private val application: Application) : ViewModel() {
         val profile = _state.value.profile.vehicleProfile
         val target = targets().firstOrNull { it.name == "CAS" || it.name == "DME / DDE" } ?: return
 
-        // Use direct memory read jobs — no key required
         val (isnJobId, memoryJobId, vinJobId) = when (profile) {
             VehicleProfileKind.E46_GENERIC,
             VehicleProfileKind.E39_GENERIC -> 
@@ -249,7 +248,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 listOf("cas_direct_read_isn", "cas_direct_read_key_memory", "cas_direct_read_vin")
         }
 
-        _state.value = _state.value.copy(keyDataBusy = true, keyDataError = "")
+        _state.value = _state.value.copy(keyDataBusy = true, keyDataError = "", busy = true)
 
         viewModelScope.launch {
             try {
@@ -259,7 +258,6 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 var rawData = ""
                 val keySlots = mutableListOf<KeySlotInfo>()
 
-                // Read ISN directly from module memory
                 BmwJobs.byId(isnJobId)?.let { job ->
                     val result = session?.execute(job)
                     if (result?.success == true) {
@@ -267,9 +265,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                         moduleVersion = result.decoded["module_version"] ?: ""
                         rawData = result.responseHex
 
-                        // Parse all key slots from memory — works even with no key present
-                        val responseBytes = result.responseHex.split(" ").mapNotNull { it.toIntOrNull(16) }
-                        // Layout: [slot_count][slot1_status][slot1_id_len][slot1_id...][slot2_status]...
+                        val responseBytes = parseHexBytes(result.responseHex)
                         var idx = 0
                         val count = responseBytes.getOrNull(idx++) ?: 4
                         for (i in 0 until minOf(count, 4)) {
@@ -295,7 +291,6 @@ class MainViewModel(private val application: Application) : ViewModel() {
                     }
                 }
 
-                // Read VIN if available
                 BmwJobs.byId(vinJobId)?.let { job ->
                     val result = session?.execute(job)
                     if (result?.success == true) {
@@ -312,20 +307,21 @@ class MainViewModel(private val application: Application) : ViewModel() {
                         moduleVersion = moduleVersion,
                         rawKeyData = rawData
                     ),
-                    keyDataBusy = false
+                    keyDataBusy = false,
+                    busy = false
                 )
                 val programmedCount = keySlots.count { slot: KeySlotInfo -> slot.hasModuleData }
-                log("INFO", "Key data read from module memory: ${keySlots.count { it.keyPresent }} keys present, $programmedCount slots programmed")
+                log("INFO", "Key data read: ${keySlots.count { slot: KeySlotInfo -> slot.keyPresent }} keys present, $programmedCount slots programmed")
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     keyDataBusy = false,
+                    busy = false,
                     keyDataError = "Key read failed: ${e.message}"
                 )
                 log("ERROR", "Key data read failed: ${e.message}")
             }
         }
     }
-
     fun exportKeyData() {
         val result = _state.value.keyDataResult ?: return
         val export = buildString {
@@ -352,14 +348,16 @@ class MainViewModel(private val application: Application) : ViewModel() {
             appendLine("NOTE: All data read directly from module EEPROM/memory.")
             appendLine("No physical key is required to retrieve this information.")
         }
-        log("INFO", "Key data exported (${export.length} chars)")
+        val file = java.io.File(getApplication<Application>().cacheDir, "key_export_${System.currentTimeMillis()}.txt")
+        file.writeText(export)
+        log("INFO", "Key data exported to ${file.absolutePath} (${export.length} chars)")
     }
-
     fun selectKeySlot(slotNumber: Int) {
         _state.value = _state.value.copy(
             selectedKeySlot = slotNumber,
             keySlotDetail = null,
-            keySlotDetailError = ""
+            keySlotDetailError = "",
+            keySlotDetailBusy = false
         )
         log("INFO", "Selected key slot $slotNumber")
     }
@@ -368,7 +366,6 @@ class MainViewModel(private val application: Application) : ViewModel() {
         val profile = _state.value.profile.vehicleProfile
         val target = targets().firstOrNull { it.name == "CAS" || it.name == "DME / DDE" } ?: return
 
-        // Use direct memory read — works even with no key present
         val jobId = when (profile) {
             VehicleProfileKind.E46_GENERIC,
             VehicleProfileKind.E39_GENERIC -> "ews_direct_read_slot_$slotNumber"
@@ -382,16 +379,14 @@ class MainViewModel(private val application: Application) : ViewModel() {
             return
         }
 
-        _state.value = _state.value.copy(keySlotDetailBusy = true, keySlotDetailError = "")
+        _state.value = _state.value.copy(keySlotDetailBusy = true, keySlotDetailError = "", busy = true)
 
         viewModelScope.launch {
             try {
                 val result = session?.execute(job)
                 if (result?.success == true) {
-                    val responseBytes = result.responseHex.split(" ").mapNotNull { it.toIntOrNull(16) }
+                    val responseBytes = parseHexBytes(result.responseHex)
 
-                    // Parse key detail from module memory — works with or without key present
-                    // Layout: [status_flags][key_id_len][key_id...][transponder_type][transponder_id_len][transponder_id...][track_data...]
                     val statusByte = responseBytes.getOrNull(0) ?: 0
                     val hasKey = (statusByte and 0x01) != 0
                     val hasModuleData = (statusByte and 0x02) != 0
@@ -447,12 +442,14 @@ class MainViewModel(private val application: Application) : ViewModel() {
                             hasModuleData = hasModuleData,
                             moduleDataStatus = if (hasModuleData) "Module has stored key data" else "No module data"
                         ),
-                        keySlotDetailBusy = false
+                        keySlotDetailBusy = false,
+                        busy = false
                     )
                     log("INFO", "Key slot $slotNumber read from module memory: key=$hasKey, data=$hasModuleData, ID=$keyId")
                 } else {
                     _state.value = _state.value.copy(
                         keySlotDetailBusy = false,
+                        busy = false,
                         keySlotDetailError = "Failed to read slot $slotNumber: ${result?.summary ?: "No response"}"
                     )
                     log("ERROR", "Key slot $slotNumber read failed: ${result?.summary ?: "No response"}")
@@ -460,13 +457,13 @@ class MainViewModel(private val application: Application) : ViewModel() {
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     keySlotDetailBusy = false,
+                    busy = false,
                     keySlotDetailError = "Slot $slotNumber read error: ${e.message}"
                 )
                 log("ERROR", "Key slot $slotNumber read error: ${e.message}")
             }
         }
     }
-
     fun exportKeySlotDetail() {
         val detail = _state.value.keySlotDetail ?: return
         val result = _state.value.keyDataResult
@@ -497,10 +494,10 @@ class MainViewModel(private val application: Application) : ViewModel() {
             appendLine("4. CAS sync may be required after key insertion")
             appendLine("5. If slot is empty but has module data, key programming should succeed")
         }
-        log("INFO", "Key slot ${detail.slotNumber} exported (${export.length} chars)")
+        val file = java.io.File(getApplication<Application>().cacheDir, "key_slot_${detail.slotNumber}_export_${System.currentTimeMillis()}.txt")
+        file.writeText(export)
+        log("INFO", "Key slot ${detail.slotNumber} exported to ${file.absolutePath} (${export.length} chars)")
     }
-
-
     fun refreshDevices() {
         viewModelScope.launch {
             runBusy {
@@ -1806,7 +1803,17 @@ class MainViewModel(private val application: Application) : ViewModel() {
 
     private fun log(level: String, message: String) {
         _state.value = _state.value.copy(logs = listOf(LogEntry(timestamp(), level, message)) + _state.value.logs)
-    }
+    
+
+    private fun parseHexBytes(hexString: String): List<Int> {
+        val trimmed = hexString.trim()
+        if (trimmed.isEmpty()) return emptyList()
+        return if (' ' in trimmed) {
+            trimmed.split(" ").mapNotNull { it.toIntOrNull(16) }
+        } else {
+            trimmed.chunked(2).mapNotNull { it.toIntOrNull(16) }
+        }
+    }}
 
     private fun timestamp(): String = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
 
