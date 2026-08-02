@@ -234,16 +234,16 @@ class MainViewModel(private val application: Application) : ViewModel() {
         val profile = _state.value.profile.vehicleProfile
         val target = targets().firstOrNull { it.name == "CAS" || it.name == "DME / DDE" } ?: return
 
-        // Determine which jobs to run based on vehicle profile
-        val (isnJobId, slotJobId, idJobId, vinJobId) = when (profile) {
+        // Use direct memory read jobs — no key required
+        val (isnJobId, memoryJobId, vinJobId) = when (profile) {
             VehicleProfileKind.E46_GENERIC,
             VehicleProfileKind.E39_GENERIC -> 
-                listOf("ews_read_isn", "ews_read_key_data", "", "")
+                listOf("ews_direct_read_memory", "ews_direct_read_memory", "")
             VehicleProfileKind.F10_GENERIC,
             VehicleProfileKind.F30_GENERIC ->
-                listOf("cas_read_isn", "fem_read_key_data", "", "")
+                listOf("fem_direct_read_memory", "fem_direct_read_memory", "")
             else ->
-                listOf("cas_read_isn", "cas_read_key_slots", "cas_read_key_id", "cas_read_vin")
+                listOf("cas_direct_read_isn", "cas_direct_read_key_memory", "cas_direct_read_vin")
         }
 
         _state.value = _state.value.copy(keyDataBusy = true, keyDataError = "")
@@ -256,48 +256,38 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 var rawData = ""
                 val keySlots = mutableListOf<KeySlotInfo>()
 
-                // Read ISN
+                // Read ISN directly from module memory
                 BmwJobs.byId(isnJobId)?.let { job ->
                     val result = session?.execute(job)
                     if (result?.success == true) {
                         isn = result.decoded["isn"] ?: result.responseHex.take(8)
                         moduleVersion = result.decoded["module_version"] ?: ""
-                    }
-                }
-
-                // Read key slots
-                BmwJobs.byId(slotJobId)?.let { job ->
-                    val result = session?.execute(job)
-                    if (result?.success == true) {
                         rawData = result.responseHex
-                        // Parse key slot data from response
+
+                        // Parse all key slots from memory — works even with no key present
                         val responseBytes = result.responseHex.split(" ").mapNotNull { it.toIntOrNull(16) }
-                        // Typical CAS key slot layout: byte 0 = count, then slot data
-                        val count = responseBytes.getOrNull(0) ?: 0
+                        // Layout: [slot_count][slot1_status][slot1_id_len][slot1_id...][slot2_status]...
+                        var idx = 0
+                        val count = responseBytes.getOrNull(idx++) ?: 4
                         for (i in 0 until minOf(count, 4)) {
-                            val present = responseBytes.getOrNull(i + 1)?.let { it > 0 } ?: false
+                            val statusByte = responseBytes.getOrNull(idx++) ?: 0
+                            val hasKey = (statusByte and 0x01) != 0
+                            val hasModuleData = (statusByte and 0x02) != 0
+                            val idLen = responseBytes.getOrNull(idx++) ?: 0
+                            val keyId = if (idLen > 0 && responseBytes.size > idx + idLen) {
+                                responseBytes.subList(idx, idx + idLen).joinToString("") { "%02X".format(it) }
+                            } else ""
+                            idx += idLen
+
                             keySlots.add(KeySlotInfo(
                                 slotNumber = i + 1,
-                                keyPresent = present,
-                                keyId = result.decoded["key_id_${i+1}"] ?: "",
-                                keyStatus = if (present) "Active" else "Empty",
-                                keyType = result.decoded["key_type_${i+1}"] ?: "Unknown"
+                                keyPresent = hasKey,
+                                keyId = keyId,
+                                keyStatus = if (hasKey) "Key present" else if (hasModuleData) "Programmed (no key)" else "Empty",
+                                keyType = result.decoded["key_type_${i+1}"] ?: "Unknown",
+                                hasModuleData = hasModuleData,
+                                moduleDataStatus = if (hasModuleData) "Data stored in module" else "No data"
                             ))
-                        }
-                    }
-                }
-
-                // Read key ID if available
-                BmwJobs.byId(idJobId)?.let { job ->
-                    val result = session?.execute(job)
-                    if (result?.success == true) {
-                        keySlots.forEachIndexed { index, slot ->
-                            if (index < keySlots.size) {
-                                val newId = result.decoded["key_id_${index+1}"] ?: ""
-                                if (newId.isNotEmpty()) {
-                                    keySlots[index] = slot.copy(keyId = newId)
-                                }
-                            }
                         }
                     }
                 }
@@ -321,7 +311,8 @@ class MainViewModel(private val application: Application) : ViewModel() {
                     ),
                     keyDataBusy = false
                 )
-                log("INFO", "Key data read: ${keySlots.count { it.keyPresent }} keys present")
+                val programmedCount = keySlots.count { it.hasModuleData }
+                log("INFO", "Key data read from module memory: ${keySlots.count { it.keyPresent }} keys present, $programmedCount slots programmed")
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     keyDataBusy = false,
@@ -335,7 +326,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
     fun exportKeyData() {
         val result = _state.value.keyDataResult ?: return
         val export = buildString {
-            appendLine("BMW Key Data Export")
+            appendLine("BMW Key Data Export — Read Directly from Module Memory (No Key Required)")
             appendLine("Generated: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
             appendLine("Vehicle Profile: ${_state.value.activeVehicleProfile}")
             appendLine()
@@ -346,13 +337,17 @@ class MainViewModel(private val application: Application) : ViewModel() {
             appendLine()
             result.keySlots.forEach { slot ->
                 appendLine("Slot ${slot.slotNumber}:")
-                appendLine("  Present: ${if (slot.keyPresent) "Yes" else "No"}")
+                appendLine("  Key Present: ${if (slot.keyPresent) "Yes" else "No"}")
+                appendLine("  Module Data: ${if (slot.hasModuleData) "Yes" else "No"}")
                 appendLine("  ID: ${slot.keyId}")
                 appendLine("  Status: ${slot.keyStatus}")
                 appendLine("  Type: ${slot.keyType}")
             }
             appendLine()
             appendLine("Raw Data: ${result.rawKeyData}")
+            appendLine()
+            appendLine("NOTE: All data read directly from module EEPROM/memory.")
+            appendLine("No physical key is required to retrieve this information.")
         }
         log("INFO", "Key data exported (${export.length} chars)")
     }
@@ -370,16 +365,17 @@ class MainViewModel(private val application: Application) : ViewModel() {
         val profile = _state.value.profile.vehicleProfile
         val target = targets().firstOrNull { it.name == "CAS" || it.name == "DME / DDE" } ?: return
 
+        // Use direct memory read — works even with no key present
         val jobId = when (profile) {
             VehicleProfileKind.E46_GENERIC,
-            VehicleProfileKind.E39_GENERIC -> "ews_read_key_slot_$slotNumber"
+            VehicleProfileKind.E39_GENERIC -> "ews_direct_read_slot_$slotNumber"
             VehicleProfileKind.F10_GENERIC,
-            VehicleProfileKind.F30_GENERIC -> "fem_read_key_slot_$slotNumber"
-            else -> "cas_read_key_slot_$slotNumber"
+            VehicleProfileKind.F30_GENERIC -> "fem_direct_read_slot_$slotNumber"
+            else -> "cas_direct_read_slot_$slotNumber"
         }
 
         val job = BmwJobs.byId(jobId) ?: run {
-            _state.value = _state.value.copy(keySlotDetailError = "No job defined for slot $slotNumber on this vehicle")
+            _state.value = _state.value.copy(keySlotDetailError = "No direct read job for slot $slotNumber")
             return
         }
 
@@ -391,52 +387,66 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 if (result?.success == true) {
                     val responseBytes = result.responseHex.split(" ").mapNotNull { it.toIntOrNull(16) }
 
-                    // Parse key detail from response
-                    // Typical layout: [status][key_id_len][key_id...][transponder_type][transponder_id...][track_data...]
-                    val keyPresent = responseBytes.getOrNull(0)?.let { it > 0 } ?: false
-                    val keyIdLen = responseBytes.getOrNull(1) ?: 0
-                    val keyId = if (keyIdLen > 0 && responseBytes.size > 2 + keyIdLen) {
-                        responseBytes.subList(2, 2 + keyIdLen).joinToString("") { "%02X".format(it) }
-                    } else ""
+                    // Parse key detail from module memory — works with or without key present
+                    // Layout: [status_flags][key_id_len][key_id...][transponder_type][transponder_id_len][transponder_id...][track_data...]
+                    val statusByte = responseBytes.getOrNull(0) ?: 0
+                    val hasKey = (statusByte and 0x01) != 0
+                    val hasModuleData = (statusByte and 0x02) != 0
+                    val isDisabled = (statusByte and 0x04) != 0
 
-                    val transponderTypeIdx = 2 + keyIdLen
-                    val transponderType = when (responseBytes.getOrNull(transponderTypeIdx)) {
+                    var idx = 1
+                    val keyIdLen = responseBytes.getOrNull(idx++) ?: 0
+                    val keyId = if (keyIdLen > 0 && responseBytes.size > idx + keyIdLen) {
+                        responseBytes.subList(idx, idx + keyIdLen).joinToString("") { "%02X".format(it) }
+                    } else ""
+                    idx += keyIdLen
+
+                    val transponderTypeByte = responseBytes.getOrNull(idx++) ?: 0
+                    val transponderType = when (transponderTypeByte) {
                         0x01 -> "PCF7935"
                         0x02 -> "PCF7945"
                         0x03 -> "HITAG2"
                         0x04 -> "HITAG AES"
                         0x05 -> "NCF29A1"
-                        else -> "Unknown"
+                        0x06 -> "PCF7953"
+                        0x07 -> "NCF29A1XM"
+                        else -> "Unknown (0x${"%02X".format(transponderTypeByte)})"
                     }
 
-                    val transponderIdIdx = transponderTypeIdx + 1
-                    val transponderIdLen = 4
-                    val transponderId = if (responseBytes.size > transponderIdIdx + transponderIdLen) {
-                        responseBytes.subList(transponderIdIdx, transponderIdIdx + transponderIdLen).joinToString("") { "%02X".format(it) }
+                    val transponderIdLen = responseBytes.getOrNull(idx++) ?: 4
+                    val transponderId = if (transponderIdLen > 0 && responseBytes.size > idx + transponderIdLen) {
+                        responseBytes.subList(idx, idx + transponderIdLen).joinToString("") { "%02X".format(it) }
                     } else ""
+                    idx += transponderIdLen
 
-                    val trackDataIdx = transponderIdIdx + transponderIdLen
-                    val trackData = if (responseBytes.size > trackDataIdx) {
-                        responseBytes.subList(trackDataIdx, responseBytes.size).joinToString(" ") { "%02X".format(it) }
+                    val trackData = if (responseBytes.size > idx) {
+                        responseBytes.subList(idx, responseBytes.size).joinToString(" ") { "%02X".format(it) }
                     } else ""
 
                     _state.value = _state.value.copy(
                         keySlotDetail = KeySlotDetail(
                             slotNumber = slotNumber,
-                            keyPresent = keyPresent,
+                            keyPresent = hasKey,
                             keyId = result.decoded["key_id"] ?: keyId,
-                            keyStatus = if (keyPresent) "Active" else "Empty",
-                            keyType = result.decoded["key_type"] ?: "Unknown",
+                            keyStatus = when {
+                                isDisabled -> "Disabled"
+                                hasKey -> "Key present"
+                                hasModuleData -> "Programmed (no key)"
+                                else -> "Empty"
+                            },
+                            keyType = result.decoded["key_type"] ?: transponderType,
                             transponderType = result.decoded["transponder_type"] ?: transponderType,
                             transponderId = result.decoded["transponder_id"] ?: transponderId,
                             keyTrack = result.decoded["key_track"] ?: trackData,
-                            isValid = keyPresent && keyId.isNotEmpty(),
+                            isValid = hasModuleData || hasKey,
                             keyDataHex = result.responseHex,
-                            rawResponse = result.summary
+                            rawResponse = result.summary,
+                            hasModuleData = hasModuleData,
+                            moduleDataStatus = if (hasModuleData) "Module has stored key data" else "No module data"
                         ),
                         keySlotDetailBusy = false
                     )
-                    log("INFO", "Key slot $slotNumber detail read: ID=$keyId, Transponder=$transponderType")
+                    log("INFO", "Key slot $slotNumber read from module memory: key=$hasKey, data=$hasModuleData, ID=$keyId")
                 } else {
                     _state.value = _state.value.copy(
                         keySlotDetailBusy = false,
@@ -458,13 +468,15 @@ class MainViewModel(private val application: Application) : ViewModel() {
         val detail = _state.value.keySlotDetail ?: return
         val result = _state.value.keyDataResult
         val export = buildString {
-            appendLine("BMW Key Slot ${detail.slotNumber} Export - For New Key Generation")
+            appendLine("BMW Key Slot ${detail.slotNumber} Export — For New Key Generation")
             appendLine("Generated: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
             appendLine("Vehicle Profile: ${_state.value.activeVehicleProfile}")
             appendLine("VIN: ${result?.vin ?: "N/A"}")
             appendLine("ISN: ${result?.isn ?: "N/A"}")
             appendLine()
             appendLine("=== KEY SLOT ${detail.slotNumber} DATA ===")
+            appendLine("Key Present: ${if (detail.keyPresent) "Yes" else "No"}")
+            appendLine("Module Data: ${if (detail.hasModuleData) "Yes" else "No"}")
             appendLine("Key ID: ${detail.keyId}")
             appendLine("Transponder Type: ${detail.transponderType}")
             appendLine("Transponder ID: ${detail.transponderId}")
@@ -476,9 +488,11 @@ class MainViewModel(private val application: Application) : ViewModel() {
             appendLine(detail.keyDataHex)
             appendLine()
             appendLine("=== PROGRAMMING NOTES ===")
-            appendLine("1. Use ISN and VIN to order correct transponder type")
-            appendLine("2. Program transponder with Key ID and Track data")
-            appendLine("3. CAS sync may be required after key insertion")
+            appendLine("1. All data read directly from module memory — no key required")
+            appendLine("2. Use ISN and VIN to order correct transponder type")
+            appendLine("3. Program transponder with Key ID and Track data")
+            appendLine("4. CAS sync may be required after key insertion")
+            appendLine("5. If slot is empty but has module data, key programming should succeed")
         }
         log("INFO", "Key slot ${detail.slotNumber} exported (${export.length} chars)")
     }

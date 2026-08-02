@@ -1011,7 +1011,7 @@ private fun KeysScreen(state: AppState, vm: MainViewModel) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Key Code Reading", style = MaterialTheme.typography.titleLarge)
-            Text("Read ISN, key slot data, and key IDs from the vehicle's immobilizer module.")
+            Text("Read ISN, key slot data, and key IDs directly from module memory. No key required.")
 
             Button(
                 onClick = { vm.readKeyData() },
@@ -1058,14 +1058,29 @@ private fun KeysScreen(state: AppState, vm: MainViewModel) {
                             result.keySlots.forEach { slot ->
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                     Text("Slot ${slot.slotNumber}", fontFamily = FontFamily.Monospace)
-                                    Text(
-                                        if (slot.keyPresent) "✓ Present" else "✗ Empty",
-                                        color = if (slot.keyPresent) Color(0xFF4CAF50) else Color.Gray,
-                                        fontFamily = FontFamily.Monospace
-                                    )
+                                    when {
+                                        slot.keyPresent -> Text(
+                                            "✓ Key present",
+                                            color = Color(0xFF4CAF50),
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        slot.hasModuleData -> Text(
+                                            "◌ Programmed (no key)",
+                                            color = Color(0xFF2196F3),
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        else -> Text(
+                                            "✗ Empty",
+                                            color = Color.Gray,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
                                 }
                                 if (slot.keyId.isNotEmpty()) {
                                     Text("  ID: ${slot.keyId}", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                                }
+                                if (slot.hasModuleData && !slot.keyPresent) {
+                                    Text("  ${slot.moduleDataStatus}", fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color(0xFF2196F3))
                                 }
                             }
                         }
@@ -1079,7 +1094,7 @@ private fun KeysScreen(state: AppState, vm: MainViewModel) {
                             onClick = { vm.exportKeyData() },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Export Key Data")
+                            Text("Export Key Data (No Key Required)")
                         }
                     }
                 }
@@ -1128,7 +1143,7 @@ private fun KeysScreen(state: AppState, vm: MainViewModel) {
                                                 onClick = { vm.exportKeySlotDetail() },
                                                 modifier = Modifier.fillMaxWidth()
                                             ) {
-                                                Text("Export Slot ${detail.slotNumber} for New Key")
+                                                Text("Export Slot ${detail.slotNumber} for New Key (No Key Required)")
                                             }
                                         }
                                     }

@@ -160,14 +160,18 @@ data class KeySlotDetail(
     val keyDataHex: String = "",
     val isValid: Boolean = false,
     val rawResponse: String = "",
+    val hasModuleData: Boolean = false,
+    val moduleDataStatus: String = "",
 )
 
 data class KeySlotInfo(
     val slotNumber: Int,
-    val keyPresent: Boolean,
+    val keyPresent: Boolean = false,
     val keyId: String = "",
     val keyStatus: String = "",
     val keyType: String = "",
+    val hasModuleData: Boolean = false,
+    val moduleDataStatus: String = "",
 )
 
 data class KeyDataResult(
