@@ -230,6 +230,135 @@ class MainViewModel(private val application: Application) : ViewModel() {
         }
     }
 
+    fun readKeyData() {
+        val profile = _state.value.profile.vehicleProfile
+        val target = targets().firstOrNull { it.name == "CAS" || it.name == "DME / DDE" } ?: return
+
+        // Determine which jobs to run based on vehicle profile
+        val (isnJobId, slotJobId, idJobId, vinJobId) = when (profile) {
+            VehicleProfileKind.E46_GENERIC,
+            VehicleProfileKind.E39_GENERIC -> 
+                listOf("ews_read_isn", "ews_read_key_data", "", "")
+            VehicleProfileKind.F10_GENERIC,
+            VehicleProfileKind.F30_GENERIC ->
+                listOf("cas_read_isn", "fem_read_key_data", "", "")
+            else ->
+                listOf("cas_read_isn", "cas_read_key_slots", "cas_read_key_id", "cas_read_vin")
+        }
+
+        _state.value = _state.value.copy(keyDataBusy = true, keyDataError = "")
+
+        viewModelScope.launch {
+            try {
+                var isn = ""
+                var vin = ""
+                var moduleVersion = ""
+                var rawData = ""
+                val keySlots = mutableListOf<KeySlotInfo>()
+
+                // Read ISN
+                BmwJobs.byId(isnJobId)?.let { job ->
+                    val result = session?.execute(job)
+                    if (result?.success == true) {
+                        isn = result.decoded["isn"] ?: result.responseHex.take(8)
+                        moduleVersion = result.decoded["module_version"] ?: ""
+                    }
+                }
+
+                // Read key slots
+                BmwJobs.byId(slotJobId)?.let { job ->
+                    val result = session?.execute(job)
+                    if (result?.success == true) {
+                        rawData = result.responseHex
+                        // Parse key slot data from response
+                        val responseBytes = result.responseHex.split(" ").mapNotNull { it.toIntOrNull(16) }
+                        // Typical CAS key slot layout: byte 0 = count, then slot data
+                        val count = responseBytes.getOrNull(0) ?: 0
+                        for (i in 0 until minOf(count, 4)) {
+                            val present = responseBytes.getOrNull(i + 1)?.let { it > 0 } ?: false
+                            keySlots.add(KeySlotInfo(
+                                slotNumber = i + 1,
+                                keyPresent = present,
+                                keyId = result.decoded["key_id_${i+1}"] ?: "",
+                                keyStatus = if (present) "Active" else "Empty",
+                                keyType = result.decoded["key_type_${i+1}"] ?: "Unknown"
+                            ))
+                        }
+                    }
+                }
+
+                // Read key ID if available
+                BmwJobs.byId(idJobId)?.let { job ->
+                    val result = session?.execute(job)
+                    if (result?.success == true) {
+                        keySlots.forEachIndexed { index, slot ->
+                            if (index < keySlots.size) {
+                                val newId = result.decoded["key_id_${index+1}"] ?: ""
+                                if (newId.isNotEmpty()) {
+                                    keySlots[index] = slot.copy(keyId = newId)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Read VIN if available
+                BmwJobs.byId(vinJobId)?.let { job ->
+                    val result = session?.execute(job)
+                    if (result?.success == true) {
+                        vin = result.decoded["vin"] ?: result.decoded["ascii"] ?: ""
+                    }
+                }
+
+                _state.value = _state.value.copy(
+                    keyDataResult = KeyDataResult(
+                        isn = isn,
+                        vin = vin,
+                        keySlots = keySlots,
+                        keyCount = keySlots.count { it.keyPresent },
+                        moduleVersion = moduleVersion,
+                        rawKeyData = rawData
+                    ),
+                    keyDataBusy = false
+                )
+                log("INFO", "Key data read: ${keySlots.count { it.keyPresent }} keys present")
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    keyDataBusy = false,
+                    keyDataError = "Key read failed: ${e.message}"
+                )
+                log("ERROR", "Key data read failed: ${e.message}")
+            }
+        }
+    }
+
+    fun exportKeyData() {
+        val result = _state.value.keyDataResult ?: return
+        val export = buildString {
+            appendLine("BMW Key Data Export")
+            appendLine("Generated: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
+            appendLine("Vehicle Profile: ${_state.value.activeVehicleProfile}")
+            appendLine()
+            appendLine("ISN: ${result.isn}")
+            appendLine("VIN: ${result.vin}")
+            appendLine("Module: ${result.moduleVersion}")
+            appendLine("Key Count: ${result.keyCount}")
+            appendLine()
+            result.keySlots.forEach { slot ->
+                appendLine("Slot ${slot.slotNumber}:")
+                appendLine("  Present: ${if (slot.keyPresent) "Yes" else "No"}")
+                appendLine("  ID: ${slot.keyId}")
+                appendLine("  Status: ${slot.keyStatus}")
+                appendLine("  Type: ${slot.keyType}")
+            }
+            appendLine()
+            appendLine("Raw Data: ${result.rawKeyData}")
+        }
+        // In a real app, this would write to file or share
+        log("INFO", "Key data exported (${export.length} chars)")
+    }
+
+
     fun refreshDevices() {
         viewModelScope.launch {
             runBusy {

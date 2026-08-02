@@ -182,6 +182,68 @@ object BmwJobs {
         ),
     )
 
+    private val keyReadingJobs = listOf(
+        // CAS2/CAS3 key reading
+        BmwJob(
+            id = "cas_read_isn",
+            label = "Read CAS ISN",
+            category = JobCategory.IDENTIFICATION,
+            steps = standardSessionPack() + listOf(step(0x1A, 0x93, label = "Read ISN block")),
+            description = "Read Individual Serial Number (ISN) from CAS module. Required for key matching and DME/CAS sync.",
+            supportedTargets = setOf(BmwTargets.CAS.name),
+        ),
+        BmwJob(
+            id = "cas_read_key_slots",
+            label = "Read CAS key slots",
+            category = JobCategory.LIVE_DATA,
+            steps = standardSessionPack() + listOf(step(0x21, 0x03, label = "Read key slot data")),
+            description = "Read all key slot presence, status, and key IDs from CAS.",
+            supportedTargets = setOf(BmwTargets.CAS.name),
+        ),
+        BmwJob(
+            id = "cas_read_key_id",
+            label = "Read CAS key ID",
+            category = JobCategory.IDENTIFICATION,
+            steps = standardSessionPack() + listOf(step(0x21, 0x83, label = "Read key identification")),
+            description = "Read key transponder ID and type from CAS.",
+            supportedTargets = setOf(BmwTargets.CAS.name),
+        ),
+        BmwJob(
+            id = "cas_read_vin",
+            label = "Read CAS VIN",
+            category = JobCategory.IDENTIFICATION,
+            steps = standardSessionPack() + listOf(step(0x1A, 0x90, label = "Read VIN from CAS")),
+            description = "Read stored VIN from CAS for verification.",
+            supportedTargets = setOf(BmwTargets.CAS.name),
+        ),
+        // EWS key reading (E46/E39)
+        BmwJob(
+            id = "ews_read_key_data",
+            label = "Read EWS key data",
+            category = JobCategory.IDENTIFICATION,
+            steps = standardSessionPack() + listOf(step(0x21, 0x05, label = "Read EWS key memory")),
+            description = "Read key data from EWS module (E46/E39). Includes key status and ISN.",
+            supportedTargets = setOf(BmwTargets.DME.name),
+        ),
+        BmwJob(
+            id = "ews_read_isn",
+            label = "Read EWS ISN",
+            category = JobCategory.IDENTIFICATION,
+            steps = standardSessionPack() + listOf(step(0x1A, 0x94, label = "Read EWS ISN")),
+            description = "Read ISN from EWS module for key programming.",
+            supportedTargets = setOf(BmwTargets.DME.name),
+        ),
+        // FEM/BDC key reading (F10/F30)
+        BmwJob(
+            id = "fem_read_key_data",
+            label = "Read FEM/BDC key data",
+            category = JobCategory.IDENTIFICATION,
+            steps = standardSessionPack() + listOf(step(0x21, 0x06, label = "Read FEM key slots")),
+            description = "Read key data from FEM/BDC module (F10/F30). Requires gateway routing.",
+            supportedTargets = setOf(BmwTargets.CAS.name),
+        ),
+    )
+
     private val serviceJobs = listOf(
         BmwJob(
             id = "dme_live_basic",
@@ -615,7 +677,7 @@ object BmwJobs {
         ),
     )
 
-    val all: List<BmwJob> = generic + forceIgnitionJobs + serviceJobs + moduleSpecific
+    val all: List<BmwJob> = generic + forceIgnitionJobs + keyReadingJobs + serviceJobs + moduleSpecific
 
     fun forTarget(target: EcuTarget): List<BmwJob> = all.filter { it.appliesTo(target) }
 

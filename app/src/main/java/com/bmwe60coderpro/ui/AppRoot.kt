@@ -152,6 +152,7 @@ fun AppRoot(vm: MainViewModel) {
                     vm.updateFlashInputHex(it)
                 })
             }
+            ServiceScreen.KEYS -> item { KeysScreen(state, vm) }
             ServiceScreen.EXPERIMENTS -> item { ExperimentalScreen(state, vm) }
             ServiceScreen.GAUGES -> item { GaugesScreen(state, vm) }
             else -> {
@@ -999,6 +1000,80 @@ private fun GaugeBox(label: String, value: String, unit: String, modifier: Modif
             )
             if (unit.isNotEmpty()) {
                 Text(unit, color = bmwOrange.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun KeysScreen(state: AppState, vm: MainViewModel) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Key Code Reading", style = MaterialTheme.typography.titleLarge)
+            Text("Read ISN, key slot data, and key IDs from the vehicle's immobilizer module.")
+
+            Button(
+                onClick = { vm.readKeyData() },
+                enabled = !state.keyDataBusy && state.connected,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (state.keyDataBusy) "Reading..." else "Read Key Data")
+            }
+
+            if (state.keyDataError.isNotEmpty()) {
+                Text("Error: ${state.keyDataError}", color = Color.Red)
+            }
+
+            state.keyDataResult?.let { result ->
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("ISN: ${result.isn}", fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        Text("VIN: ${result.vin}", fontFamily = FontFamily.Monospace)
+                        Text("Module: ${result.moduleVersion}", fontFamily = FontFamily.Monospace)
+                        Text("Key count: ${result.keyCount}", fontFamily = FontFamily.Monospace)
+
+                        if (result.keySlots.isNotEmpty()) {
+                            Text("Key Slots:", fontWeight = FontWeight.Bold)
+                            result.keySlots.forEach { slot ->
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text("Slot ${slot.slotNumber}", fontFamily = FontFamily.Monospace)
+                                    Text(
+                                        if (slot.keyPresent) "✓ Present" else "✗ Empty",
+                                        color = if (slot.keyPresent) Color(0xFF4CAF50) else Color.Gray,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                                if (slot.keyId.isNotEmpty()) {
+                                    Text("  ID: ${slot.keyId}", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                                }
+                                if (slot.keyStatus.isNotEmpty()) {
+                                    Text("  Status: ${slot.keyStatus}", fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                                }
+                            }
+                        }
+
+                        if (result.rawKeyData.isNotEmpty()) {
+                            Text("Raw Data:", fontWeight = FontWeight.Bold)
+                            Text(result.rawKeyData, fontFamily = FontFamily.Monospace, fontSize = 11.sp)
+                        }
+
+                        OutlinedButton(
+                            onClick = { vm.exportKeyData() },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Export Key Data")
+                        }
+                    }
+                }
+            } ?: run {
+                if (!state.keyDataBusy && state.keyDataError.isEmpty()) {
+                    Text("Press 'Read Key Data' to fetch information from the vehicle.", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            if (!state.connected) {
+                Text("Connect to vehicle first.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
             }
         }
     }

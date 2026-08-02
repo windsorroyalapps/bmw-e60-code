@@ -27,6 +27,7 @@ enum class ServiceScreen {
     CAS,
     FRM,
     ACSM,
+    KEYS,
     CODING,
     TUNING,
     CCC,
@@ -146,6 +147,24 @@ data class TuningMap(
     val table: List<List<Float>>
 )
 
+
+data class KeySlotInfo(
+    val slotNumber: Int,
+    val keyPresent: Boolean,
+    val keyId: String = "",
+    val keyStatus: String = "",
+    val keyType: String = "",
+)
+
+data class KeyDataResult(
+    val isn: String = "",
+    val vin: String = "",
+    val keySlots: List<KeySlotInfo> = emptyList(),
+    val keyCount: Int = 0,
+    val moduleVersion: String = "",
+    val rawKeyData: String = "",
+)
+
 data class AppState(
     val activeCommProfile: String = "BMW Generic",
     val activeVehicleProfile: String = "Generic E60 / E61",
@@ -237,6 +256,10 @@ data class AppState(
     val tuningReadResult: String = "",
     val tuningWriteResult: String = "",
 
+    // Key code reading
+    val keyDataResult: KeyDataResult? = null,
+    val keyDataBusy: Boolean = false,
+    val keyDataError: String = "",
     // Connection status popup
     val showConnectionPopup: Boolean = false,
     val connectionStatusLines: List<String> = emptyList(),
