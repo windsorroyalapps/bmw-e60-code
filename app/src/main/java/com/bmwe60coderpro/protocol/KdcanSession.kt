@@ -10,6 +10,7 @@ class KdcanSession(
     private var vehicleProfile: VehicleProfileKind = VehicleProfileKind.GENERIC_E60,
     private val testerAddress: Int = 0xF1,
 ) {
+    fun getTransport(): Transport = transport
     private var commProfile: CommProfile = BmwCommProfiles.forTarget(target, vehicleProfile)
     fun setTarget(target: EcuTarget) {
         this.target = target

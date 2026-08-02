@@ -1381,17 +1381,48 @@ private fun TransportCard(state: AppState, vm: MainViewModel) {
                         onValueChange = { vm.setBluetoothMac(it) },
                         label = { Text("Vgate Bluetooth MAC") },
                         placeholder = { Text("00:00:00:00:00:00") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        isError = state.bluetoothMac.isNotEmpty() && !vm.validateBluetoothMac(state.bluetoothMac),
+                        supportingText = {
+                            if (state.bluetoothMac.isNotEmpty() && !vm.validateBluetoothMac(state.bluetoothMac)) {
+                                Text("Invalid MAC format. Use XX:XX:XX:XX:XX:XX", color = Color.Red)
+                            }
+                        }
                     )
+
+                    // Show connected device info
+                    if (state.bluetoothConnectedMac.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        ) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text("Connected Device", fontWeight = FontWeight.Bold)
+                                Text("Name: ${state.bluetoothConnectedName}")
+                                Text("MAC: ${state.bluetoothConnectedMac}", fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
+
                     Text(
                         "Pair Vgate adapter in Android Bluetooth settings first, then enter its MAC address.",
                         style = MaterialTheme.typography.bodySmall
                     )
-                    Button(
-                        onClick = { vm.scanBluetoothDevices() },
-                        enabled = !state.bluetoothScanning
-                    ) {
-                        Text(if (state.bluetoothScanning) "Scanning..." else "Scan Paired Devices")
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { vm.scanBluetoothDevices() },
+                            enabled = !state.bluetoothScanning
+                        ) {
+                            Text(if (state.bluetoothScanning) "Scanning..." else "Scan Paired Devices")
+                        }
+
+                        OutlinedButton(
+                            onClick = { vm.readConnectedBluetoothMac() },
+                            enabled = state.connected
+                        ) {
+                            Text("Get MAC from Device")
+                        }
                     }
 
                     if (state.bluetoothDevices.isNotEmpty()) {

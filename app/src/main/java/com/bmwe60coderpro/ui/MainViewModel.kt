@@ -364,11 +364,46 @@ class MainViewModel(private val application: Application) : ViewModel() {
     }
 
     fun setBluetoothMac(mac: String) {
+        // Auto-format MAC with colons if user enters continuous hex
+        val formattedMac = if (mac.length == 12 && !mac.contains(":")) {
+            mac.chunked(2).joinToString(":")
+        } else mac
+
         _state.value = _state.value.copy(
-            bluetoothMac = mac,
-            profile = _state.value.profile.copy(bluetoothMac = mac)
+            bluetoothMac = formattedMac,
+            profile = _state.value.profile.copy(bluetoothMac = formattedMac)
         )
         prefs.saveProfile(_state.value.profile)
+    }
+
+    fun readConnectedBluetoothMac() {
+        val transport = session?.getTransport()
+        if (transport is BluetoothTransport) {
+            val mac = transport.getConnectedDeviceMac()
+            val name = transport.getConnectedDeviceName()
+            if (mac.isNotEmpty()) {
+                _state.value = _state.value.copy(
+                    bluetoothConnectedMac = mac,
+                    bluetoothConnectedName = name,
+                    bluetoothMac = mac,
+                    profile = _state.value.profile.copy(bluetoothMac = mac)
+                )
+                prefs.saveProfile(_state.value.profile)
+                log("INFO", "Read MAC from connected Bluetooth device: $name ($mac)")
+            } else {
+                _state.value = _state.value.copy(
+                    dashboardStatus = "No Bluetooth device currently connected"
+                )
+            }
+        } else {
+            _state.value = _state.value.copy(
+                dashboardStatus = "Bluetooth transport not active"
+            )
+        }
+    }
+
+    fun validateBluetoothMac(mac: String): Boolean {
+        return mac.matches(Regex("^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$"))
     }
 
     fun scanBluetoothDevices() {

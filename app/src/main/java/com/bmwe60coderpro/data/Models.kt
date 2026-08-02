@@ -276,6 +276,8 @@ data class AppState(
 
     // Bluetooth
     val bluetoothMac: String = "",
+    val bluetoothConnectedMac: String = "",
+    val bluetoothConnectedName: String = "",
     val bluetoothDevices: List<Pair<String, String>> = emptyList(),
     val bluetoothScanning: Boolean = false,
     // Key code reading
