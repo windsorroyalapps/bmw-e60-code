@@ -1848,6 +1848,13 @@ class MainViewModel(private val application: Application) : ViewModel() {
         return when (profile.transport) {
             TransportType.USB_KDCAN -> UsbSerialTransport(application, UsbPermissionManager(application))
             TransportType.ETHERNET_OBD -> TcpObdTransport(profile.tcpHost, profile.tcpPort, profile.connectTimeoutMs, profile.readTimeoutMs)
+            TransportType.BLUETOOTH_OBD -> {
+                if (profile.bluetoothMac.isBlank()) {
+                    _state.value = _state.value.copy(dashboardStatus = "Bluetooth MAC address required")
+                    throw IllegalArgumentException("Bluetooth MAC address required")
+                }
+                BluetoothTransport(profile.bluetoothMac, profile.connectTimeoutMs, profile.readTimeoutMs)
+            }
         }
     }
 

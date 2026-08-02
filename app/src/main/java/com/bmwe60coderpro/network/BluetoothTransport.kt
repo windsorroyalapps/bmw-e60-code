@@ -3,6 +3,7 @@ package com.bmwe60coderpro.network
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import com.bmwe60coderpro.data.DeviceInfo
 import com.bmwe60coderpro.protocol.Transport
 import java.io.InputStream
 import java.io.OutputStream
@@ -23,30 +24,33 @@ class BluetoothTransport(
         val SPP_UUID: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
     }
 
-    override fun open(): Boolean {
-        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return false
-        if (!adapter.isEnabled) return false
-
-        val device: BluetoothDevice = try {
-            adapter.getRemoteDevice(deviceAddress)
-        } catch (e: IllegalArgumentException) {
-            return false
-        }
-
-        return try {
-            socket = device.createRfcommSocketToServiceRecord(SPP_UUID)
-            socket?.connect()
-            inputStream = socket?.inputStream
-            outputStream = socket?.outputStream
-            connected = true
-            true
-        } catch (e: Exception) {
-            close()
-            false
-        }
+    override suspend fun listDevices(): List<DeviceInfo> {
+        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return emptyList()
+        if (!adapter.isEnabled) return emptyList()
+        return adapter.bondedDevices?.map {
+            DeviceInfo(it.address, it.name ?: "Unknown", "bluetooth")
+        } ?: emptyList()
     }
 
-    override fun close() {
+    override suspend fun connect(targetId: String?) {
+        val adapter = BluetoothAdapter.getDefaultAdapter() ?: throw IllegalStateException("Bluetooth not available")
+        if (!adapter.isEnabled) throw IllegalStateException("Bluetooth is disabled")
+
+        val address = targetId ?: deviceAddress
+        val device: BluetoothDevice = try {
+            adapter.getRemoteDevice(address)
+        } catch (e: IllegalArgumentException) {
+            throw IllegalStateException("Invalid Bluetooth address: $address")
+        }
+
+        socket = device.createRfcommSocketToServiceRecord(SPP_UUID)
+        socket?.connect()
+        inputStream = socket?.inputStream
+        outputStream = socket?.outputStream
+        connected = true
+    }
+
+    override suspend fun disconnect() {
         connected = false
         try { inputStream?.close() } catch (_: Exception) {}
         try { outputStream?.close() } catch (_: Exception) {}
@@ -58,41 +62,14 @@ class BluetoothTransport(
 
     override fun isConnected(): Boolean = connected && socket?.isConnected == true
 
-    override fun send(data: ByteArray): Boolean {
-        return try {
-            outputStream?.write(data)
-            outputStream?.flush()
-            true
-        } catch (e: Exception) {
-            connected = false
-            false
-        }
+    override suspend fun write(bytes: ByteArray) {
+        outputStream?.write(bytes)
+        outputStream?.flush()
     }
 
-    override fun receive(): ByteArray? {
-        return try {
-            val available = inputStream?.available() ?: 0
-            if (available > 0) {
-                val buffer = ByteArray(available)
-                val read = inputStream?.read(buffer) ?: 0
-                if (read > 0) buffer.copyOf(read) else null
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            connected = false
-            null
-        }
-    }
-
-    override fun readWithTimeout(timeoutMs: Int): ByteArray? {
-        return try {
-            socket?.soTimeout = timeoutMs
-            val buffer = ByteArray(4096)
-            val read = inputStream?.read(buffer) ?: 0
-            if (read > 0) buffer.copyOf(read) else null
-        } catch (e: Exception) {
-            null
-        }
+    override suspend fun read(timeoutMs: Int): ByteArray {
+        val buffer = ByteArray(4096)
+        val read = inputStream?.read(buffer) ?: 0
+        return if (read > 0) buffer.copyOf(read) else byteArrayOf()
     }
 }
