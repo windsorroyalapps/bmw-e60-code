@@ -193,33 +193,33 @@ private fun VehicleProfileCard(state: AppState, vm: MainViewModel, label: String
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Vehicle profile / address book", style = MaterialTheme.typography.titleMedium)
 
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = !expanded }
-            ) {
-                OutlinedTextField(
-                    value = label,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Select chassis / engine") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth()
-                )
-                ExposedDropdownMenu(
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { expanded = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(label)
+                }
+                DropdownMenu(
                     expanded = expanded,
-                    onDismissRequest = { expanded = false }
+                    onDismissRequest = { expanded = false },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     vm.vehicleProfiles.forEach { profile ->
-                        DropdownMenuItem(
-                            text = { Text(profile.label) },
+                        TextButton(
                             onClick = {
                                 vm.selectVehicleProfile(profile.kind)
                                 expanded = false
                             },
-                            leadingIcon = if (state.profile.vehicleProfile == profile.kind) {
-                                { Text("✓") }
-                            } else null
-                        )
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                buildString {
+                                    if (state.profile.vehicleProfile == profile.kind) append("✓ ")
+                                    append(profile.label)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -231,7 +231,7 @@ private fun VehicleProfileCard(state: AppState, vm: MainViewModel, label: String
     }
 }
 
-@Composable@Composable
+@Composable@Composable@Composable
 private fun AdapterPresetCard(state: AppState, vm: MainViewModel, label: String, notes: String) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

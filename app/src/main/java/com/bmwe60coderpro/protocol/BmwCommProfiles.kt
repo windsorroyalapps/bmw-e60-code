@@ -63,6 +63,7 @@ object BmwCommProfiles {
                 BmwTargets.CAS.name -> base.copy(name = "N62 CAS", requestTimeoutMs = 1600, postConnectDelayMs = 475)
                 else -> base
             }
+            else -> base
         }
     }
 }

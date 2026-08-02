@@ -191,7 +191,6 @@ class MainViewModel(private val application: Application) : ViewModel() {
 
     fun forceIgnitionOn() {
         val profile = _state.value.profile.vehicleProfile
-        val target = targets().firstOrNull { it.name == "CAS" || it.name == "DME / DDE" } ?: return
         val jobId = when (profile) {
             VehicleProfileKind.E46_GENERIC,
             VehicleProfileKind.E39_GENERIC -> "force_ignition_ews"
@@ -208,12 +207,19 @@ class MainViewModel(private val application: Application) : ViewModel() {
         viewModelScope.launch {
             runBusy {
                 try {
-                    val result = session?.executeJob(job, target)
-                    _state.value = _state.value.copy(
-                        forceIgnitionOn = true,
-                        ignitionStatus = "Ignition forced ON via ${job.label}"
-                    )
-                    log("INFO", "Force ignition: ${job.label} -> OK")
+                    val result = session?.execute(job)
+                    if (result != null && result.success) {
+                        _state.value = _state.value.copy(
+                            forceIgnitionOn = true,
+                            ignitionStatus = "Ignition forced ON via ${job.label}"
+                        )
+                        log("INFO", "Force ignition: ${job.label} -> OK")
+                    } else {
+                        _state.value = _state.value.copy(
+                            ignitionStatus = "Force ignition failed: ${result?.summary ?: "No response"}"
+                        )
+                        log("ERROR", "Force ignition failed: ${result?.summary ?: "No response"}")
+                    }
                 } catch (e: Exception) {
                     _state.value = _state.value.copy(
                         ignitionStatus = "Force ignition failed: ${e.message}"
