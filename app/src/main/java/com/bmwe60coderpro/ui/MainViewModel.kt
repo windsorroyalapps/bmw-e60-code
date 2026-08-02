@@ -274,7 +274,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                             val hasModuleData = (statusByte and 0x02) != 0
                             val idLen = responseBytes.getOrNull(idx++) ?: 0
                             val keyId = if (idLen > 0 && responseBytes.size > idx + idLen) {
-                                responseBytes.subList(idx, idx + idLen).joinToString("") { "%02X".format(it) }
+                                responseBytes.subList(idx, idx + idLen).joinToString("") { b -> "%02X".format(b) }
                             } else ""
                             idx += idLen
 
@@ -348,7 +348,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
             appendLine("NOTE: All data read directly from module EEPROM/memory.")
             appendLine("No physical key is required to retrieve this information.")
         }
-        val file = java.io.File(getApplication<Application>().cacheDir, "key_export_${System.currentTimeMillis()}.txt")
+        val file = java.io.File(application.cacheDir, "key_export_${System.currentTimeMillis()}.txt")
         file.writeText(export)
         log("INFO", "Key data exported to ${file.absolutePath} (${export.length} chars)")
     }
@@ -395,7 +395,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                     var idx = 1
                     val keyIdLen = responseBytes.getOrNull(idx++) ?: 0
                     val keyId = if (keyIdLen > 0 && responseBytes.size > idx + keyIdLen) {
-                        responseBytes.subList(idx, idx + keyIdLen).joinToString("") { "%02X".format(it) }
+                        responseBytes.subList(idx, idx + keyIdLen).joinToString("") { b -> "%02X".format(b) }
                     } else ""
                     idx += keyIdLen
 
@@ -413,12 +413,12 @@ class MainViewModel(private val application: Application) : ViewModel() {
 
                     val transponderIdLen = responseBytes.getOrNull(idx++) ?: 4
                     val transponderId = if (transponderIdLen > 0 && responseBytes.size > idx + transponderIdLen) {
-                        responseBytes.subList(idx, idx + transponderIdLen).joinToString("") { "%02X".format(it) }
+                        responseBytes.subList(idx, idx + transponderIdLen).joinToString("") { b -> "%02X".format(b) }
                     } else ""
                     idx += transponderIdLen
 
                     val trackData = if (responseBytes.size > idx) {
-                        responseBytes.subList(idx, responseBytes.size).joinToString(" ") { "%02X".format(it) }
+                        responseBytes.subList(idx, responseBytes.size).joinToString(" ") { b -> "%02X".format(b) }
                     } else ""
 
                     _state.value = _state.value.copy(
@@ -494,7 +494,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
             appendLine("4. CAS sync may be required after key insertion")
             appendLine("5. If slot is empty but has module data, key programming should succeed")
         }
-        val file = java.io.File(getApplication<Application>().cacheDir, "key_slot_${detail.slotNumber}_export_${System.currentTimeMillis()}.txt")
+        val file = java.io.File(application.cacheDir, "key_slot_${detail.slotNumber}_export_${System.currentTimeMillis()}.txt")
         file.writeText(export)
         log("INFO", "Key slot ${detail.slotNumber} exported to ${file.absolutePath} (${export.length} chars)")
     }
