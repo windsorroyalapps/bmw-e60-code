@@ -189,6 +189,41 @@ class MainViewModel(private val application: Application) : ViewModel() {
         prefs.savePollingInterval(ms)
     }
 
+    fun forceIgnitionOn() {
+        val profile = _state.value.profile.vehicleProfile
+        val target = targets().firstOrNull { it.name == "CAS" || it.name == "DME / DDE" } ?: return
+        val jobId = when (profile) {
+            VehicleProfileKind.E46_GENERIC,
+            VehicleProfileKind.E39_GENERIC -> "force_ignition_ews"
+            VehicleProfileKind.F10_GENERIC,
+            VehicleProfileKind.F30_GENERIC -> "force_ignition_cas4"
+            VehicleProfileKind.E90_GENERIC,
+            VehicleProfileKind.E92_N54,
+            VehicleProfileKind.E70_GENERIC,
+            VehicleProfileKind.E71_GENERIC,
+            VehicleProfileKind.E87_GENERIC -> "force_ignition_cas3"
+            else -> "force_ignition_cas2" // E60 default
+        }
+        val job = BmwJobs.byId(jobId) ?: return
+        viewModelScope.launch {
+            runBusy {
+                try {
+                    val result = session?.executeJob(job, target)
+                    _state.value = _state.value.copy(
+                        forceIgnitionOn = true,
+                        ignitionStatus = "Ignition forced ON via ${job.label}"
+                    )
+                    log("INFO", "Force ignition: ${job.label} -> OK")
+                } catch (e: Exception) {
+                    _state.value = _state.value.copy(
+                        ignitionStatus = "Force ignition failed: ${e.message}"
+                    )
+                    log("ERROR", "Force ignition failed: ${e.message}")
+                }
+            }
+        }
+    }
+
     fun refreshDevices() {
         viewModelScope.launch {
             runBusy {

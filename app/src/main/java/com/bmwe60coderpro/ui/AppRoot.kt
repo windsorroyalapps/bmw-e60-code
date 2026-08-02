@@ -188,25 +188,50 @@ fun AppRoot(vm: MainViewModel) {
 
 @Composable
 private fun VehicleProfileCard(state: AppState, vm: MainViewModel, label: String, notes: String) {
+    var expanded by remember { mutableStateOf(false) }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Vehicle profile / address book")
-            vm.vehicleProfiles.forEach { profile ->
-                OutlinedButton(onClick = { vm.selectVehicleProfile(profile.kind) }, modifier = Modifier.fillMaxWidth()) {
-                    Text(buildString {
-                        if (state.profile.vehicleProfile == profile.kind) append("✓ ")
-                        append(profile.label)
-                    })
+            Text("Vehicle profile / address book", style = MaterialTheme.typography.titleMedium)
+
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded }
+            ) {
+                OutlinedTextField(
+                    value = label,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Select chassis / engine") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    modifier = Modifier.menuAnchor().fillMaxWidth()
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    vm.vehicleProfiles.forEach { profile ->
+                        DropdownMenuItem(
+                            text = { Text(profile.label) },
+                            onClick = {
+                                vm.selectVehicleProfile(profile.kind)
+                                expanded = false
+                            },
+                            leadingIcon = if (state.profile.vehicleProfile == profile.kind) {
+                                { Text("✓") }
+                            } else null
+                        )
+                    }
                 }
             }
-            Text("Selected vehicle profile: $label")
-            Text("Notes: $notes")
-            Text("Target map: ${E60AddressBook.describeTarget(state.profile.vehicleProfile, state.selectedTargetId)}")
+
+            Text("Notes: $notes", style = MaterialTheme.typography.bodySmall)
+            Text("Target: ${E60AddressBook.describeTarget(state.profile.vehicleProfile, state.selectedTargetId)}", 
+                 style = MaterialTheme.typography.bodySmall)
         }
     }
 }
 
-@Composable
+@Composable@Composable
 private fun AdapterPresetCard(state: AppState, vm: MainViewModel, label: String, notes: String) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

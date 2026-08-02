@@ -4,7 +4,18 @@ enum class TransportType { USB_KDCAN, ETHERNET_OBD }
 
 enum class AdapterPresetKind { USB_FTDI_FAST, USB_FTDI_SAFE, USB_CH340_SAFE, ETH_ENET, ETH_GENERIC_TCP }
 
-enum class VehicleProfileKind { GENERIC_E60, N52_6HP, N54_6HP, M57_6HP, N62_6HP }
+enum class VehicleProfileKind { 
+    GENERIC_E60, N52_6HP, N54_6HP, M57_6HP, N62_6HP,
+    E90_GENERIC,
+    E46_GENERIC,
+    E39_GENERIC,
+    F10_GENERIC,
+    E70_GENERIC,
+    E71_GENERIC,
+    E87_GENERIC,
+    E92_N54,
+    F30_GENERIC,
+}
 
 enum class ServiceScreen {
     OVERVIEW,

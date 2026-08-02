@@ -131,6 +131,57 @@ object BmwJobs {
         ),
     )
 
+    private val forceIgnitionJobs = listOf(
+        BmwJob(
+            id = "force_ignition_cas2",
+            label = "Force ignition ON (CAS2)",
+            category = JobCategory.CONTROL,
+            steps = listOf(
+                step(0x10, 0x85, label = "CAS2 extended session"),
+                step(0x31, 0x01, 0x01, label = "Force terminal 15 ON"),
+            ),
+            description = "Force ignition ON for CAS2 vehicles (E60, early E90).",
+            readOnly = false,
+            supportedTargets = setOf(BmwTargets.CAS.name),
+        ),
+        BmwJob(
+            id = "force_ignition_cas3",
+            label = "Force ignition ON (CAS3)",
+            category = JobCategory.CONTROL,
+            steps = listOf(
+                step(0x10, 0x87, label = "CAS3 extended session"),
+                step(0x31, 0x01, 0x02, label = "Force terminal 15 ON (CAS3)"),
+            ),
+            description = "Force ignition ON for CAS3+ vehicles (E90 LCI, E92, E70, E71, E87).",
+            readOnly = false,
+            supportedTargets = setOf(BmwTargets.CAS.name),
+        ),
+        BmwJob(
+            id = "force_ignition_cas4",
+            label = "Force ignition ON (CAS4/FEM)",
+            category = JobCategory.CONTROL,
+            steps = listOf(
+                step(0x10, 0x87, label = "CAS4 extended session"),
+                step(0x31, 0x01, 0x03, label = "Force terminal 15 ON (CAS4)"),
+            ),
+            description = "Force ignition ON for CAS4/FEM vehicles (F10, F30). Requires gateway routing.",
+            readOnly = false,
+            supportedTargets = setOf(BmwTargets.CAS.name),
+        ),
+        BmwJob(
+            id = "force_ignition_ews",
+            label = "Force ignition ON (EWS bypass)",
+            category = JobCategory.CONTROL,
+            steps = listOf(
+                step(0x10, 0x81, label = "EWS session"),
+                step(0x31, 0x01, 0x00, label = "EWS ignition bypass"),
+            ),
+            description = "EWS-based ignition bypass for E46 and E39 (no CAS module).",
+            readOnly = false,
+            supportedTargets = setOf(BmwTargets.DME.name),
+        ),
+    )
+
     private val serviceJobs = listOf(
         BmwJob(
             id = "dme_live_basic",
@@ -564,7 +615,7 @@ object BmwJobs {
         ),
     )
 
-    val all: List<BmwJob> = generic + serviceJobs + moduleSpecific
+    val all: List<BmwJob> = generic + forceIgnitionJobs + serviceJobs + moduleSpecific
 
     fun forTarget(target: EcuTarget): List<BmwJob> = all.filter { it.appliesTo(target) }
 

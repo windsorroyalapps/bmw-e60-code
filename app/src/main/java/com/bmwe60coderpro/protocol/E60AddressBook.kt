@@ -49,6 +49,60 @@ object E60AddressBook {
             notes = "V8 profile with slower startup and safer retries on engine diagnostics.",
             recommendedPreset = AdapterPresetKind.USB_FTDI_SAFE,
         ),
+        VehicleProfile(
+            kind = VehicleProfileKind.E90_GENERIC,
+            label = "E90 / E91 / E92 / E93",
+            notes = "3 Series with CAS2/CAS3. Force ignition via CAS terminal control.",
+            recommendedPreset = AdapterPresetKind.USB_FTDI_FAST,
+        ),
+        VehicleProfile(
+            kind = VehicleProfileKind.E46_GENERIC,
+            label = "E46 3 Series",
+            notes = "EWS3/MSK-based. No CAS; force ignition uses EWS bypass sequence.",
+            recommendedPreset = AdapterPresetKind.USB_FTDI_SAFE,
+        ),
+        VehicleProfile(
+            kind = VehicleProfileKind.E39_GENERIC,
+            label = "E39 5 Series",
+            notes = "EWS3-based with K-bus. Force ignition via EWS bypass.",
+            recommendedPreset = AdapterPresetKind.USB_FTDI_SAFE,
+        ),
+        VehicleProfile(
+            kind = VehicleProfileKind.F10_GENERIC,
+            label = "F10 / F11 5 Series",
+            notes = "F-series with CAS4/FEM. Uses ENET gateway for force ignition.",
+            recommendedPreset = AdapterPresetKind.ETH_ENET,
+        ),
+        VehicleProfile(
+            kind = VehicleProfileKind.E70_GENERIC,
+            label = "E70 X5",
+            notes = "X5 with CAS3. Force ignition via CAS3 terminal control.",
+            recommendedPreset = AdapterPresetKind.USB_FTDI_FAST,
+        ),
+        VehicleProfile(
+            kind = VehicleProfileKind.E71_GENERIC,
+            label = "E71 X6",
+            notes = "X6 with CAS3. Force ignition via CAS3 terminal control.",
+            recommendedPreset = AdapterPresetKind.USB_FTDI_FAST,
+        ),
+        VehicleProfile(
+            kind = VehicleProfileKind.E87_GENERIC,
+            label = "E81 / E87 / E82 / E88",
+            notes = "1 Series with CAS2/CAS3. Force ignition via CAS terminal control.",
+            recommendedPreset = AdapterPresetKind.USB_FTDI_FAST,
+        ),
+        VehicleProfile(
+            kind = VehicleProfileKind.E92_N54,
+            label = "E92 335i N54",
+            notes = "E92 coupe with N54 and CAS3. Turbo-specific force ignition profile.",
+            recommendedPreset = AdapterPresetKind.USB_FTDI_FAST,
+        ),
+        VehicleProfile(
+            kind = VehicleProfileKind.F30_GENERIC,
+            label = "F30 / F31 3 Series",
+            notes = "F30 with FEM/BDC. Uses ENET for force ignition and diagnostics.",
+            recommendedPreset = AdapterPresetKind.ETH_ENET,
+        ),
     )
 
     private val genericTargets = listOf(
@@ -81,6 +135,65 @@ object E60AddressBook {
         VehicleProfileKind.N62_6HP to genericTargets.map {
             when (it.name) {
                 BmwTargets.DME.name -> it.copy(address = 0x12, notes = "N62 DMEs use the standard engine target here")
+                else -> it
+            }
+        },
+        VehicleProfileKind.E90_GENERIC to genericTargets.map {
+            when (it.name) {
+                BmwTargets.CAS.name -> it.copy(address = 0x40, notes = "CAS3 on E90 — force ignition supported")
+                else -> it
+            }
+        },
+        VehicleProfileKind.E92_N54 to genericTargets.map {
+            when (it.name) {
+                BmwTargets.CAS.name -> it.copy(address = 0x40, notes = "CAS3 on E92 — force ignition supported")
+                BmwTargets.DME.name -> it.copy(address = 0x12, notes = "N54 MSD80/MSD81 on E92")
+                else -> it
+            }
+        },
+        VehicleProfileKind.E46_GENERIC to genericTargets.map {
+            when (it.name) {
+                BmwTargets.CAS.name -> it.copy(address = 0x00, notes = "E46 has no CAS — use EWS bypass via DME")
+                BmwTargets.DME.name -> it.copy(address = 0x12, notes = "E46 DME with EWS3 integration")
+                else -> it
+            }
+        },
+        VehicleProfileKind.E39_GENERIC to genericTargets.map {
+            when (it.name) {
+                BmwTargets.CAS.name -> it.copy(address = 0x00, notes = "E39 has no CAS — use EWS bypass via DME")
+                BmwTargets.DME.name -> it.copy(address = 0x12, notes = "E39 DME with EWS3 integration")
+                else -> it
+            }
+        },
+        VehicleProfileKind.F10_GENERIC to genericTargets.map {
+            when (it.name) {
+                BmwTargets.CAS.name -> it.copy(address = 0x40, notes = "CAS4 on F10 — gateway routed")
+                BmwTargets.DME.name -> it.copy(address = 0x12, notes = "F10 N55/N20 DME via gateway")
+                else -> it
+            }
+        },
+        VehicleProfileKind.E70_GENERIC to genericTargets.map {
+            when (it.name) {
+                BmwTargets.CAS.name -> it.copy(address = 0x40, notes = "CAS3 on E70 X5")
+                else -> it
+            }
+        },
+        VehicleProfileKind.E71_GENERIC to genericTargets.map {
+            when (it.name) {
+                BmwTargets.CAS.name -> it.copy(address = 0x40, notes = "CAS3 on E71 X6")
+                else -> it
+            }
+        },
+        VehicleProfileKind.E87_GENERIC to genericTargets.map {
+            when (it.name) {
+                BmwTargets.CAS.name -> it.copy(address = 0x40, notes = "CAS2/CAS3 on E87")
+                else -> it
+            }
+        },
+        VehicleProfileKind.F30_GENERIC to genericTargets.map {
+            when (it.name) {
+                BmwTargets.CAS.name -> it.copy(address = 0x40, notes = "FEM/BDC on F30 — gateway routed")
+                BmwTargets.DME.name -> it.copy(address = 0x12, notes = "F30 N20/N26 DME via gateway")
                 else -> it
             }
         },
