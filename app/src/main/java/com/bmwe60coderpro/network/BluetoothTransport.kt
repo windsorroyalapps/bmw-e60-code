@@ -28,7 +28,7 @@ class BluetoothTransport(
         val adapter = BluetoothAdapter.getDefaultAdapter() ?: return emptyList()
         if (!adapter.isEnabled) return emptyList()
         return adapter.bondedDevices?.map {
-            DeviceInfo(it.address, it.name ?: "Unknown", "bluetooth")
+            DeviceInfo(it.address, it.name ?: "Unknown")
         } ?: emptyList()
     }
 
