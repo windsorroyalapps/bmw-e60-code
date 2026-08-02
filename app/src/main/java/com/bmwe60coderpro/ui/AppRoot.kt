@@ -195,30 +195,33 @@ private fun VehicleProfileCard(state: AppState, vm: MainViewModel, label: String
 
             Box(modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
-                    onClick = { expanded = true },
+                    onClick = { expanded = !expanded },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(label)
                 }
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    vm.vehicleProfiles.forEach { profile ->
-                        TextButton(
-                            onClick = {
-                                vm.selectVehicleProfile(profile.kind)
-                                expanded = false
-                            },
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                buildString {
-                                    if (state.profile.vehicleProfile == profile.kind) append("✓ ")
-                                    append(profile.label)
+                if (expanded) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+                            vm.vehicleProfiles.forEach { profile ->
+                                TextButton(
+                                    onClick = {
+                                        vm.selectVehicleProfile(profile.kind)
+                                        expanded = false
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        buildString {
+                                            if (state.profile.vehicleProfile == profile.kind) append("✓ ")
+                                            append(profile.label)
+                                        }
+                                    )
                                 }
-                            )
+                            }
                         }
                     }
                 }
@@ -229,9 +232,7 @@ private fun VehicleProfileCard(state: AppState, vm: MainViewModel, label: String
                  style = MaterialTheme.typography.bodySmall)
         }
     }
-}
-
-@Composable@Composable@Composable
+}@Composable
 private fun AdapterPresetCard(state: AppState, vm: MainViewModel, label: String, notes: String) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
