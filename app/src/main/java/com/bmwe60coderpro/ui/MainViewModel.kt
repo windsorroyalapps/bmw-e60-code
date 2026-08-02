@@ -20,6 +20,9 @@ import com.bmwe60coderpro.data.TransportType
 import com.bmwe60coderpro.data.TuningMap
 import com.bmwe60coderpro.data.VehicleProfileKind
 import com.bmwe60coderpro.data.RemoteStartMode
+import com.bmwe60coderpro.data.KeySlotInfo
+import com.bmwe60coderpro.data.KeySlotDetail
+import com.bmwe60coderpro.data.KeyDataResult
 import com.bmwe60coderpro.network.SimRemoteTransport
 import com.bmwe60coderpro.network.TcpObdTransport
 import com.bmwe60coderpro.protocol.BmwCommProfiles
@@ -305,13 +308,13 @@ class MainViewModel(private val application: Application) : ViewModel() {
                         isn = isn,
                         vin = vin,
                         keySlots = keySlots,
-                        keyCount = keySlots.count { it.keyPresent },
+                        keyCount = keySlots.count { slot: KeySlotInfo -> slot.keyPresent },
                         moduleVersion = moduleVersion,
                         rawKeyData = rawData
                     ),
                     keyDataBusy = false
                 )
-                val programmedCount = keySlots.count { it.hasModuleData }
+                val programmedCount = keySlots.count { slot: KeySlotInfo -> slot.hasModuleData }
                 log("INFO", "Key data read from module memory: ${keySlots.count { it.keyPresent }} keys present, $programmedCount slots programmed")
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
