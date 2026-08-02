@@ -354,8 +354,133 @@ class MainViewModel(private val application: Application) : ViewModel() {
             appendLine()
             appendLine("Raw Data: ${result.rawKeyData}")
         }
-        // In a real app, this would write to file or share
         log("INFO", "Key data exported (${export.length} chars)")
+    }
+
+    fun selectKeySlot(slotNumber: Int) {
+        _state.value = _state.value.copy(
+            selectedKeySlot = slotNumber,
+            keySlotDetail = null,
+            keySlotDetailError = ""
+        )
+        log("INFO", "Selected key slot $slotNumber")
+    }
+
+    fun readKeySlotDetail(slotNumber: Int) {
+        val profile = _state.value.profile.vehicleProfile
+        val target = targets().firstOrNull { it.name == "CAS" || it.name == "DME / DDE" } ?: return
+
+        val jobId = when (profile) {
+            VehicleProfileKind.E46_GENERIC,
+            VehicleProfileKind.E39_GENERIC -> "ews_read_key_slot_$slotNumber"
+            VehicleProfileKind.F10_GENERIC,
+            VehicleProfileKind.F30_GENERIC -> "fem_read_key_slot_$slotNumber"
+            else -> "cas_read_key_slot_$slotNumber"
+        }
+
+        val job = BmwJobs.byId(jobId) ?: run {
+            _state.value = _state.value.copy(keySlotDetailError = "No job defined for slot $slotNumber on this vehicle")
+            return
+        }
+
+        _state.value = _state.value.copy(keySlotDetailBusy = true, keySlotDetailError = "")
+
+        viewModelScope.launch {
+            try {
+                val result = session?.execute(job)
+                if (result?.success == true) {
+                    val responseBytes = result.responseHex.split(" ").mapNotNull { it.toIntOrNull(16) }
+
+                    // Parse key detail from response
+                    // Typical layout: [status][key_id_len][key_id...][transponder_type][transponder_id...][track_data...]
+                    val keyPresent = responseBytes.getOrNull(0)?.let { it > 0 } ?: false
+                    val keyIdLen = responseBytes.getOrNull(1) ?: 0
+                    val keyId = if (keyIdLen > 0 && responseBytes.size > 2 + keyIdLen) {
+                        responseBytes.subList(2, 2 + keyIdLen).joinToString("") { "%02X".format(it) }
+                    } else ""
+
+                    val transponderTypeIdx = 2 + keyIdLen
+                    val transponderType = when (responseBytes.getOrNull(transponderTypeIdx)) {
+                        0x01 -> "PCF7935"
+                        0x02 -> "PCF7945"
+                        0x03 -> "HITAG2"
+                        0x04 -> "HITAG AES"
+                        0x05 -> "NCF29A1"
+                        else -> "Unknown"
+                    }
+
+                    val transponderIdIdx = transponderTypeIdx + 1
+                    val transponderIdLen = 4
+                    val transponderId = if (responseBytes.size > transponderIdIdx + transponderIdLen) {
+                        responseBytes.subList(transponderIdIdx, transponderIdIdx + transponderIdLen).joinToString("") { "%02X".format(it) }
+                    } else ""
+
+                    val trackDataIdx = transponderIdIdx + transponderIdLen
+                    val trackData = if (responseBytes.size > trackDataIdx) {
+                        responseBytes.subList(trackDataIdx, responseBytes.size).joinToString(" ") { "%02X".format(it) }
+                    } else ""
+
+                    _state.value = _state.value.copy(
+                        keySlotDetail = KeySlotDetail(
+                            slotNumber = slotNumber,
+                            keyPresent = keyPresent,
+                            keyId = result.decoded["key_id"] ?: keyId,
+                            keyStatus = if (keyPresent) "Active" else "Empty",
+                            keyType = result.decoded["key_type"] ?: "Unknown",
+                            transponderType = result.decoded["transponder_type"] ?: transponderType,
+                            transponderId = result.decoded["transponder_id"] ?: transponderId,
+                            keyTrack = result.decoded["key_track"] ?: trackData,
+                            isValid = keyPresent && keyId.isNotEmpty(),
+                            keyDataHex = result.responseHex,
+                            rawResponse = result.summary
+                        ),
+                        keySlotDetailBusy = false
+                    )
+                    log("INFO", "Key slot $slotNumber detail read: ID=$keyId, Transponder=$transponderType")
+                } else {
+                    _state.value = _state.value.copy(
+                        keySlotDetailBusy = false,
+                        keySlotDetailError = "Failed to read slot $slotNumber: ${result?.summary ?: "No response"}"
+                    )
+                    log("ERROR", "Key slot $slotNumber read failed: ${result?.summary ?: "No response"}")
+                }
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(
+                    keySlotDetailBusy = false,
+                    keySlotDetailError = "Slot $slotNumber read error: ${e.message}"
+                )
+                log("ERROR", "Key slot $slotNumber read error: ${e.message}")
+            }
+        }
+    }
+
+    fun exportKeySlotDetail() {
+        val detail = _state.value.keySlotDetail ?: return
+        val result = _state.value.keyDataResult
+        val export = buildString {
+            appendLine("BMW Key Slot ${detail.slotNumber} Export - For New Key Generation")
+            appendLine("Generated: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
+            appendLine("Vehicle Profile: ${_state.value.activeVehicleProfile}")
+            appendLine("VIN: ${result?.vin ?: "N/A"}")
+            appendLine("ISN: ${result?.isn ?: "N/A"}")
+            appendLine()
+            appendLine("=== KEY SLOT ${detail.slotNumber} DATA ===")
+            appendLine("Key ID: ${detail.keyId}")
+            appendLine("Transponder Type: ${detail.transponderType}")
+            appendLine("Transponder ID: ${detail.transponderId}")
+            appendLine("Key Track: ${detail.keyTrack}")
+            appendLine("Status: ${detail.keyStatus}")
+            appendLine("Valid: ${if (detail.isValid) "Yes" else "No"}")
+            appendLine()
+            appendLine("=== RAW HEX DATA ===")
+            appendLine(detail.keyDataHex)
+            appendLine()
+            appendLine("=== PROGRAMMING NOTES ===")
+            appendLine("1. Use ISN and VIN to order correct transponder type")
+            appendLine("2. Program transponder with Key ID and Track data")
+            appendLine("3. CAS sync may be required after key insertion")
+        }
+        log("INFO", "Key slot ${detail.slotNumber} exported (${export.length} chars)")
     }
 
 

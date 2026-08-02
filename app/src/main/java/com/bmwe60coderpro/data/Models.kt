@@ -148,6 +148,20 @@ data class TuningMap(
 )
 
 
+data class KeySlotDetail(
+    val slotNumber: Int,
+    val keyPresent: Boolean = false,
+    val keyId: String = "",
+    val keyStatus: String = "",
+    val keyType: String = "",
+    val transponderType: String = "",
+    val transponderId: String = "",
+    val keyTrack: String = "",
+    val keyDataHex: String = "",
+    val isValid: Boolean = false,
+    val rawResponse: String = "",
+)
+
 data class KeySlotInfo(
     val slotNumber: Int,
     val keyPresent: Boolean,
@@ -260,6 +274,10 @@ data class AppState(
     val keyDataResult: KeyDataResult? = null,
     val keyDataBusy: Boolean = false,
     val keyDataError: String = "",
+    val selectedKeySlot: Int = 0,
+    val keySlotDetail: KeySlotDetail? = null,
+    val keySlotDetailBusy: Boolean = false,
+    val keySlotDetailError: String = "",
     // Connection status popup
     val showConnectionPopup: Boolean = false,
     val connectionStatusLines: List<String> = emptyList(),
