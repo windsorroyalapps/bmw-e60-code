@@ -1803,7 +1803,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
 
     private fun log(level: String, message: String) {
         _state.value = _state.value.copy(logs = listOf(LogEntry(timestamp(), level, message)) + _state.value.logs)
-    
+    }
 
     private fun parseHexBytes(hexString: String): List<Int> {
         val trimmed = hexString.trim()
@@ -1813,7 +1813,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
         } else {
             trimmed.chunked(2).mapNotNull { it.toIntOrNull(16) }
         }
-    }}
+    }
 
     private fun timestamp(): String = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
 
