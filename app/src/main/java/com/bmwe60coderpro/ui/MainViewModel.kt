@@ -20,6 +20,7 @@ import com.bmwe60coderpro.data.TransportType
 import com.bmwe60coderpro.data.TuningMap
 import com.bmwe60coderpro.data.VehicleProfileKind
 import com.bmwe60coderpro.data.RemoteStartMode
+import com.bmwe60coderpro.network.BluetoothTransport
 import com.bmwe60coderpro.data.KeySlotInfo
 import com.bmwe60coderpro.data.KeySlotDetail
 import com.bmwe60coderpro.data.KeyDataResult
@@ -360,6 +361,21 @@ class MainViewModel(private val application: Application) : ViewModel() {
             keySlotDetailBusy = false
         )
         log("INFO", "Selected key slot $slotNumber")
+    }
+
+    fun setBluetoothMac(mac: String) {
+        _state.value = _state.value.copy(
+            bluetoothMac = mac,
+            profile = _state.value.profile.copy(bluetoothMac = mac)
+        )
+        prefs.saveProfile(_state.value.profile)
+    }
+
+    fun scanBluetoothDevices() {
+        _state.value = _state.value.copy(
+            bluetoothDevices = listOf("Pair Vgate in Android Settings" to ""),
+            dashboardStatus = "Pair Vgate adapter in Android Bluetooth settings, then enter MAC"
+        )
     }
 
     fun readKeySlotDetail(slotNumber: Int) {

@@ -1,8 +1,8 @@
 package com.bmwe60coderpro.data
 
-enum class TransportType { USB_KDCAN, ETHERNET_OBD }
+enum class TransportType { USB_KDCAN, ETHERNET_OBD, BLUETOOTH_OBD }
 
-enum class AdapterPresetKind { USB_FTDI_FAST, USB_FTDI_SAFE, USB_CH340_SAFE, ETH_ENET, ETH_GENERIC_TCP }
+enum class AdapterPresetKind { USB_FTDI_FAST, USB_FTDI_SAFE, USB_CH340_SAFE, ETH_ENET, ETH_GENERIC_TCP, BLUETOOTH_VGATE }
 
 enum class VehicleProfileKind { 
     GENERIC_E60, N52_6HP, N54_6HP, M57_6HP, N62_6HP,
@@ -81,6 +81,7 @@ data class ConnectionProfile(
     val baudRate: Int = 115200,
     val tcpHost: String = "192.168.0.10",
     val tcpPort: Int = 35000,
+    val bluetoothMac: String = "",
     val connectTimeoutMs: Int = 2000,
     val readTimeoutMs: Int = 1500,
     val settleDelayMs: Long = 250,
@@ -273,6 +274,10 @@ data class AppState(
     val tuningReadResult: String = "",
     val tuningWriteResult: String = "",
 
+    // Bluetooth
+    val bluetoothMac: String = "",
+    val bluetoothDevices: List<Pair<String, String>> = emptyList(),
+    val bluetoothScanning: Boolean = false,
     // Key code reading
     val keyDataResult: KeyDataResult? = null,
     val keyDataBusy: Boolean = false,

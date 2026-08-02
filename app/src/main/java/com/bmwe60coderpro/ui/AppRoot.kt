@@ -1365,12 +1365,35 @@ private fun TransportCard(state: AppState, vm: MainViewModel) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row { RadioButton(selected = state.selectedTransport == TransportType.USB_KDCAN, onClick = { vm.setTransport(TransportType.USB_KDCAN) }); Text("USB K+DCAN") }
                 Row { RadioButton(selected = state.selectedTransport == TransportType.ETHERNET_OBD, onClick = { vm.setTransport(TransportType.ETHERNET_OBD) }); Text("Ethernet OBD") }
+                Row { RadioButton(selected = state.selectedTransport == TransportType.BLUETOOTH_OBD, onClick = { vm.setTransport(TransportType.BLUETOOTH_OBD) }); Text("Bluetooth Vgate") }
             }
-            if (state.selectedTransport == TransportType.USB_KDCAN) {
-                OutlinedTextField(value = state.profile.baudRate.toString(), onValueChange = vm::updateBaudRate, label = { Text("Baud rate") }, modifier = Modifier.fillMaxWidth())
-            } else {
-                OutlinedTextField(value = state.profile.tcpHost, onValueChange = vm::updateHost, label = { Text("Adapter IP") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = state.profile.tcpPort.toString(), onValueChange = vm::updatePort, label = { Text("TCP port") }, modifier = Modifier.fillMaxWidth())
+            when (state.selectedTransport) {
+                TransportType.USB_KDCAN -> {
+                    OutlinedTextField(value = state.profile.baudRate.toString(), onValueChange = vm::updateBaudRate, label = { Text("Baud rate") }, modifier = Modifier.fillMaxWidth())
+                }
+                TransportType.ETHERNET_OBD -> {
+                    OutlinedTextField(value = state.profile.tcpHost, onValueChange = vm::updateHost, label = { Text("Adapter IP") }, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = state.profile.tcpPort.toString(), onValueChange = vm::updatePort, label = { Text("TCP port") }, modifier = Modifier.fillMaxWidth())
+                }
+                TransportType.BLUETOOTH_OBD -> {
+                    OutlinedTextField(
+                        value = state.bluetoothMac,
+                        onValueChange = { vm.setBluetoothMac(it) },
+                        label = { Text("Vgate Bluetooth MAC") },
+                        placeholder = { Text("00:00:00:00:00:00") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        "Pair Vgate adapter in Android Bluetooth settings first, then enter its MAC address.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Button(
+                        onClick = { vm.scanBluetoothDevices() },
+                        enabled = !state.bluetoothScanning
+                    ) {
+                        Text("Scan for Vgate")
+                    }
+                }
             }
             Text("Connect timeout: ${state.profile.connectTimeoutMs} ms")
             Text("Read timeout: ${state.profile.readTimeoutMs} ms")
