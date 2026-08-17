@@ -82,12 +82,32 @@ class EnetTransport(
         return header + payload
     }
 
-    /** Parse a BMW-FAST frame from ENET. */
+    /**
+     * Parse a BMW-FAST frame received over ENET/TCP.
+     *
+     * Frame layout (big-endian):
+     *   [0..1] length of payload
+     *   [2]    target address
+     *   [3]    source address
+     *   [4..]  payload (length bytes)
+     *
+     * Returns (target, payload) or null when the buffer is incomplete / invalid.
+     */
     fun parseFastFrame(data: ByteArray): Pair<Int, ByteArray>? {
+        // Minimum header size is 4 bytes
         if (data.size < 4) return null
+
         val length = ((data[0].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)
+        // Sanity: reject absurd lengths (BMW diagnostic payloads are typically < 4 KB)
+        if (length < 0 || length > 4096) return null
+
         val target = data[2].toInt() and 0xFF
+        // Source is data[3] — kept for future routing; not returned by this helper
+
+        // Incomplete frame — wait for more data
         if (data.size < 4 + length) return null
-        return target to data.copyOfRange(4, 4 + length)
+
+        val payload = if (length == 0) ByteArray(0) else data.copyOfRange(4, 4 + length)
+        return target to payload
     }
 }
