@@ -34,6 +34,7 @@ enum class ServiceScreen {
     FLASHING,
     EXPERIMENTS,
     GAUGES,
+    INJECTION,
 }
 
 enum class CodingPresetKind {
@@ -246,10 +247,19 @@ data class AppState(
     val remoteStartArmed: Boolean = false,
     val remoteStartResult: String = "",
     val remoteStartBusy: Boolean = false,
+    val remoteStarted: Boolean = false,
+    val safetyGearP: Boolean = false,
+    val safetyHoodClosed: Boolean = false,
+    val safetyBrakeReleased: Boolean = false,
+    val safetyVoltageOk: Boolean = false,
+    val safetyRpm: Int = 0,
     // Warning suppression
     val warningSuppressResult: String = "",
     // ACSM
     val acsmResult: String = "",
+    // Injection
+    val injectionResult: String = "",
+    val injectionBusy: Boolean = false,
     // Xbox wired USB controller bridge
     val controllerConnected: Boolean = false,
     val controllerName: String = "No controller detected",

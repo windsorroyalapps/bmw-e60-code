@@ -37,7 +37,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.HorizontalDivider
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -53,18 +55,33 @@ import com.bmwe60coderpro.data.TuningMap
 import com.bmwe60coderpro.data.TransportType
 import com.bmwe60coderpro.protocol.DatenManager
 import com.bmwe60coderpro.protocol.E60AddressBook
+import com.bmwe60coderpro.protocol.CanInjector
+import com.bmwe60coderpro.protocol.E60CanBus
+import com.bmwe60coderpro.protocol.MflInjector
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 
 @Composable
 fun AppRoot(vm: MainViewModel) {
@@ -154,6 +171,7 @@ fun AppRoot(vm: MainViewModel) {
             }
             ServiceScreen.EXPERIMENTS -> item { ExperimentalScreen(state, vm) }
             ServiceScreen.GAUGES -> item { GaugesScreen(state, vm) }
+            ServiceScreen.INJECTION -> item { InjectionScreen(state, vm) }
             else -> {
                 item { TransportCompactCard(state = state, vm = vm) }
                 item {
@@ -1275,21 +1293,48 @@ private fun ExperimentalScreen(state: AppState, vm: MainViewModel) {
                         fontFamily = FontFamily.Monospace)
                 }
 
+                // ── Pre-flight Checklist ──────────────────────────────────
+                Text("Pre-flight checklist", style = MaterialTheme.typography.labelMedium)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    SafetyCheckItem("Gear in Park (P)", state.safetyGearP)
+                    SafetyCheckItem("Hood closed", state.safetyHoodClosed)
+                    SafetyCheckItem("Brake released", state.safetyBrakeReleased)
+                    SafetyCheckItem("Battery voltage > 11.5V", state.safetyVoltageOk)
+                }
+
+                Divider()
+
                 // ── Start / Stop ───────────────────────────────────────────
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
                     Button(
                         onClick = { vm.sendRemoteStart() },
-                        enabled = state.remoteStartArmed && !state.remoteStartBusy,
+                        enabled = state.remoteStartArmed && !state.remoteStartBusy && !state.remoteStarted,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error,
                         ),
-                    ) { Text("▶ Start engine") }
+                    ) { Text("▶ Start") }
                     Button(
                         onClick = { vm.sendRemoteStop() },
-                        enabled = state.remoteStartArmed && !state.remoteStartBusy,
+                        enabled = (state.remoteStartArmed || state.remoteStarted) && !state.remoteStartBusy,
                         modifier = Modifier.weight(1f),
-                    ) { Text("■ Stop engine") }
+                    ) { Text("■ Stop") }
+
+                    if (state.remoteStarted) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = MaterialTheme.shapes.small,
+                            modifier = Modifier.padding(start = 8.dp)
+                        ) {
+                            Text(
+                                text = "${state.safetyRpm} RPM",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
                 }
                 if (state.remoteStartResult.isNotBlank()) {
                     Text(state.remoteStartResult, fontFamily = FontFamily.Monospace,
@@ -1299,6 +1344,31 @@ private fun ExperimentalScreen(state: AppState, vm: MainViewModel) {
         }
     }
 }
+
+@Composable
+private fun SafetyCheckItem(label: String, passed: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.padding(vertical = 2.dp)
+    ) {
+        val tint = if (passed) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error
+        Icon(
+            imageVector = if (passed) Icons.Default.CheckCircle else Icons.Default.Warning,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(18.dp)
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (passed) MaterialTheme.colorScheme.onSurface 
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+            fontWeight = if (passed) FontWeight.Medium else FontWeight.Normal
+        )
+    }
+}
+
 
 @Composable
 private fun LiveDashboardCard(
@@ -1456,6 +1526,198 @@ private fun TransportCard(state: AppState, vm: MainViewModel) {
             Text(if (state.connected) "Status: Connected" else "Status: Disconnected")
             Text("Vehicle profile: ${state.activeVehicleProfile}")
             Text("Comm profile: ${state.activeCommProfile}")
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun InjectionScreen(state: AppState, vm: MainViewModel) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("CAN / KWP Injection", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Directly override vehicle state by spoofing control messages via KWP 0x30 (IO Control) " +
+                    "and 0x31 (Routine Control). Use with extreme caution.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
+        // ── Status Bar ──────────────────────────────────────────────────
+        Card(
+            Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (state.injectionBusy) MaterialTheme.colorScheme.secondaryContainer 
+                                 else MaterialTheme.colorScheme.surfaceVariant
+            )
+        ) {
+            Row(
+                Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (state.injectionBusy) {
+                    androidx.compose.material3.CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                }
+                Text(
+                    text = if (state.injectionResult.isBlank()) "Ready for injection" else state.injectionResult,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+
+        // ── Actions Grid ────────────────────────────────────────────────
+        val groups = CanInjector.ACTIONS.groupBy { it.target.name }
+        groups.forEach { (targetName, actions) ->
+            Text(targetName, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                actions.forEach { action ->
+                    InjectionActionChip(action, state, vm)
+                }
+            }
+        }
+
+        // ── Macros ──────────────────────────────────────────────────────
+        Text("Sequential Macros", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 16.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            CanInjector.MACROS.forEach { macro ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { vm.runInjectionMacro(macro) },
+                    enabled = !state.injectionBusy && (state.connected || state.simConnected)
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Text(macro.label, style = MaterialTheme.typography.titleMedium)
+                        }
+                        Text(
+                            "${macro.actions.size} steps | ${macro.delayBetweenMs}ms delay",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── Raw CAN Frame Injection ─────────────────────────────────────
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Raw CAN Frame Injection", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Select a message definition and enter hex payload to inject raw CAN frames. " +
+                    "Requires active K+DCAN connection.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+
+                var selectedMsgName by remember { mutableStateOf(E60CanBus.ALL_MESSAGES.firstOrNull()?.name ?: "") }
+                var payloadHex by remember { mutableStateOf("") }
+
+                if (E60CanBus.ALL_MESSAGES.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Msg:", style = MaterialTheme.typography.labelMedium)
+                        Box(modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState())) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                E60CanBus.ALL_MESSAGES.forEach { msg ->
+                                    OutlinedButton(
+                                        onClick = { 
+                                            selectedMsgName = msg.name
+                                            // Pre-fill length if empty
+                                            if (payloadHex.isBlank()) {
+                                                payloadHex = "00 ".repeat(msg.length).trim()
+                                            }
+                                        },
+                                        modifier = Modifier.height(32.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                        colors = if (selectedMsgName == msg.name) 
+                                            ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                                            else ButtonDefaults.outlinedButtonColors()
+                                    ) {
+                                        Text(
+                                            text = msg.name,
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                val msgDef = E60CanBus.byName(selectedMsgName)
+                msgDef?.let {
+                    Text("ID: 0x${it.id.toString(16).uppercase()} | Bus: ${it.bus} | Len: ${it.length}", 
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                    
+                    if (it.description.isNotBlank()) {
+                        Text(it.description, style = MaterialTheme.typography.bodySmall.copy(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic))
+                    }
+                }
+
+                OutlinedTextField(
+                    value = payloadHex,
+                    onValueChange = { payloadHex = it },
+                    label = { Text("Payload Hex (e.g. 01 02 FF)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(fontFamily = FontFamily.Monospace)
+                )
+
+                Button(
+                    onClick = { vm.injectRawCanFrame(selectedMsgName, payloadHex) },
+                    enabled = (state.connected || state.simConnected) && !state.injectionBusy && payloadHex.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (state.simConnected) "Simulate Injection" else "Inject Raw Frame")
+                }
+            }
+        }
+
+        // ── Injection History / Logs ──────────────────────────────────
+        if (state.logs.any { it.level == "INFO" || it.level == "ERROR" }) {
+            Text("Recent Activity", style = MaterialTheme.typography.labelLarge)
+            state.logs.filter { it.level == "INFO" || it.level == "ERROR" }.take(5).forEach { log ->
+                Card(Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(log.timestamp, style = MaterialTheme.typography.labelSmall)
+                        Text(log.message, style = MaterialTheme.typography.bodySmall, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InjectionActionChip(action: CanInjector.InjectableAction, state: AppState, vm: MainViewModel) {
+    val color = when (action.riskLevel) {
+        CanInjector.RiskLevel.LOW -> MaterialTheme.colorScheme.primary
+        CanInjector.RiskLevel.MEDIUM -> Color(0xFFFFA000) // Amber
+        CanInjector.RiskLevel.HIGH -> Color(0xFFFF5722) // Deep Orange
+        CanInjector.RiskLevel.CRITICAL -> MaterialTheme.colorScheme.error
+    }
+
+    OutlinedButton(
+        onClick = { vm.runInjectionAction(action) },
+        enabled = !state.injectionBusy && (state.connected || state.simConnected),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.5f)),
+        shape = MaterialTheme.shapes.small,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(action.label, style = MaterialTheme.typography.labelLarge, color = color)
+            Text(
+                "0x${action.serviceId.toString(16).uppercase()}", 
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                color = color.copy(alpha = 0.7f)
+            )
         }
     }
 }

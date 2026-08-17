@@ -55,5 +55,12 @@ class TcpObdTransport(
         if (count <= 0) ByteArray(0) else buffer.copyOf(count)
     }
 
+    override suspend fun purge() = withContext(Dispatchers.IO) {
+        val inStream = input ?: return@withContext
+        if (inStream.available() > 0) {
+            inStream.skip(inStream.available().toLong())
+        }
+    }
+
     override fun isConnected(): Boolean = socket?.isConnected == true && socket?.isClosed == false
 }

@@ -131,6 +131,14 @@ class UsbSerialTransport(
         buffer.copyOf(count.coerceAtLeast(0))
     }
 
+    override suspend fun purge() = withContext(Dispatchers.IO) {
+        // Drain any stale data in the RX buffer
+        val buffer = ByteArray(1024)
+        while ((port?.read(buffer, 1) ?: 0) > 0) {
+            // Keep draining
+        }
+    }
+
     override fun isConnected(): Boolean = connected && port != null
 }
 

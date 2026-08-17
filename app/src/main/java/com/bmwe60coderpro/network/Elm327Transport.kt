@@ -91,6 +91,13 @@ class Elm327Transport(
         parseElmResponse(response)
     }
 
+    override suspend fun purge() = withContext(Dispatchers.IO) {
+        val inp = input ?: return@withContext
+        while (inp.available() > 0) {
+            inp.read()
+        }
+    }
+
     override fun isConnected(): Boolean = connected
 
     // ── ELM327-specific helpers ─────────────────────────────────────────────
@@ -109,22 +116,29 @@ class Elm327Transport(
         val buffer = StringBuilder()
         val start = System.currentTimeMillis()
         var consecutiveEmpty = 0
-        while (System.currentTimeMillis() - start < timeoutMs) {
-            val available = try { inp.available() } catch (_: Exception) { 0 }
-            if (available > 0) {
-                consecutiveEmpty = 0
-                val b = try { inp.read() } catch (_: Exception) { -1 }
-                if (b < 0) break
-                if (b == '>'.code) break // ELM327 prompt — response complete
-                // Skip null bytes and non-printable noise except CR/LF
-                if (b == '\r'.code || b == '\n'.code || b in 32..126) {
-                    buffer.append(b.toChar())
+        
+        try {
+            while (System.currentTimeMillis() - start < timeoutMs) {
+                val available = try { inp.available() } catch (_: Exception) { 0 }
+                if (available > 0) {
+                    consecutiveEmpty = 0
+                    val b = try { inp.read() } catch (_: Exception) { -1 }
+                    if (b < 0) break
+                    val char = b.toChar()
+                    if (char == '>') break // ELM327 prompt — response complete
+                    // Skip null bytes and non-printable noise except CR/LF
+                    if (b == '\r'.code || b == '\n'.code || b in 32..126) {
+                        buffer.append(char)
+                    }
+                } else {
+                    consecutiveEmpty++
+                    // Adaptive sleep: short when data may arrive soon, longer when idle
+                    Thread.sleep(if (consecutiveEmpty < 5) 5L else 15L)
                 }
-            } else {
-                consecutiveEmpty++
-                // Adaptive sleep: short when data may arrive soon, longer when idle
-                Thread.sleep(if (consecutiveEmpty < 5) 5L else 15L)
             }
+        } catch (e: Exception) {
+            // Log or handle read error (e.g. socket closed)
+            return buffer.toString().trim()
         }
         return buffer.toString().trim()
     }

@@ -145,6 +145,7 @@ object ServiceScreens {
         ServiceScreenDefinition(ServiceScreen.FLASHING, "Flashing", "Dry-run / expert flash planning with chunk preview and transfer frame generation."),
         ServiceScreenDefinition(ServiceScreen.EXPERIMENTS, "Experimental", "Remote control and gamepad preparation screens kept in safe simulation mode by default."),
         ServiceScreenDefinition(ServiceScreen.GAUGES, "Gauges", "High-visibility performance gauges in classic BMW orange."),
+        ServiceScreenDefinition(ServiceScreen.INJECTION, "CAN Injection", "Direct bus message spoofing and ECU override for advanced vehicle functions."),
     )
 
     fun byScreen(screen: ServiceScreen): ServiceScreenDefinition = all.first { it.screen == screen }

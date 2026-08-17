@@ -29,6 +29,7 @@ import com.bmwe60coderpro.network.TcpObdTransport
 import com.bmwe60coderpro.protocol.BmwCommProfiles
 import com.bmwe60coderpro.protocol.BmwJob
 import com.bmwe60coderpro.protocol.BmwJobs
+import com.bmwe60coderpro.protocol.CanInjector
 import com.bmwe60coderpro.protocol.JobCategory
 import com.bmwe60coderpro.protocol.JobStep
 import com.bmwe60coderpro.protocol.BmwTargets
@@ -50,6 +51,8 @@ import com.bmwe60coderpro.controller.ControllerInjector
 import com.bmwe60coderpro.controller.XboxControllerManager
 import com.bmwe60coderpro.protocol.SzlButtonDecoder
 import com.bmwe60coderpro.protocol.MflInjector
+import com.bmwe60coderpro.protocol.E60CanBus
+import com.bmwe60coderpro.util.HexUtils
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -85,6 +88,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
     private var simTransport: SimRemoteTransport? = null
     private var szlMonitorJob: Job? = null
     private var controllerJob: Job? = null
+    private var safetyWatchdogJob: Job? = null
     // Latest axes from MotionEvent — written from Activity thread, read by coroutine
     @Volatile private var latestAxes = com.bmwe60coderpro.controller.ControllerAxes()
     @Volatile private var latestButtons = com.bmwe60coderpro.controller.ControllerButtons()
@@ -1115,8 +1119,11 @@ class MainViewModel(private val application: Application) : ViewModel() {
     /** Called by MainActivity.dispatchKeyEvent for gamepad button events. */
     fun onControllerKey(event: KeyEvent): Boolean {
         val isDown = event.action == KeyEvent.ACTION_DOWN
+        
+        // Track whether the key code is one we care about for the vehicle bridge
+        var handled = true
 
-        // Update latestButtons state
+        // Update latestButtons state for the periodic bridge tick
         when (event.keyCode) {
             KeyEvent.KEYCODE_BUTTON_THUMBR -> latestButtons = latestButtons.copy(horn = isDown)
             KeyEvent.KEYCODE_BUTTON_A -> {
@@ -1134,26 +1141,22 @@ class MainViewModel(private val application: Application) : ViewModel() {
             KeyEvent.KEYCODE_BUTTON_START -> latestButtons = latestButtons.copy(sportOn = isDown)
             KeyEvent.KEYCODE_BUTTON_SELECT, KeyEvent.KEYCODE_BUTTON_MODE ->
                 latestButtons = latestButtons.copy(sportOff = isDown)
+            else -> handled = false
         }
 
-        when (event.keyCode) {
-            KeyEvent.KEYCODE_BUTTON_R1    -> if (isDown) sendPaddleEvent(up = true)
-            KeyEvent.KEYCODE_BUTTON_L1    -> if (isDown) sendPaddleEvent(up = false)
-            KeyEvent.KEYCODE_BUTTON_START -> if (isDown) log("CTRL", "Sport mode on (hint)")
-            KeyEvent.KEYCODE_BUTTON_SELECT, KeyEvent.KEYCODE_BUTTON_MODE ->
-                if (isDown) log("CTRL", "Sport mode off (hint)")
-            else -> {}
+        // Immediate actions for specific button presses (outside the 20Hz bridge tick)
+        if (isDown && handled) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_BUTTON_R1 -> sendPaddleEvent(up = true)
+                KeyEvent.KEYCODE_BUTTON_L1 -> sendPaddleEvent(up = false)
+                KeyEvent.KEYCODE_BUTTON_START -> log("CTRL", "Sport mode requested")
+                KeyEvent.KEYCODE_BUTTON_SELECT, KeyEvent.KEYCODE_BUTTON_MODE -> log("CTRL", "Normal mode requested")
+            }
         }
 
-        // Return true for all handled button events to prevent system-wide navigation
-        val handledCodes = setOf(
-            KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_BUTTON_B,
-            KeyEvent.KEYCODE_BUTTON_X, KeyEvent.KEYCODE_BUTTON_Y,
-            KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_BUTTON_R1,
-            KeyEvent.KEYCODE_BUTTON_START, KeyEvent.KEYCODE_BUTTON_SELECT,
-            KeyEvent.KEYCODE_BUTTON_MODE, KeyEvent.KEYCODE_BUTTON_THUMBR
-        )
-        return event.keyCode in handledCodes
+        // Return true for handled button events to prevent Android system from interpreting 
+        // them as UI navigation (e.g. Back/Home) while the app is active.
+        return handled
     }
 
     fun toggleControllerBridge() {
@@ -1674,44 +1677,68 @@ class MainViewModel(private val application: Application) : ViewModel() {
             _state.value = _state.value.copy(remoteStartResult = "Not armed — arm first")
             return
         }
+
         viewModelScope.launch {
-            _state.value = _state.value.copy(remoteStartBusy = true, remoteStartResult = "Sending start sequence…")
+            _state.value = _state.value.copy(remoteStartBusy = true, remoteStartResult = "Checking safety interlocks…")
             try {
                 val activeSession = remoteStartSession()
                     ?: error(if (_state.value.remoteStartMode == RemoteStartMode.SIM_REMOTE)
                         "SIM remote not connected — tap Connect via SIM first"
                     else "Not connected to vehicle via K+DCAN")
 
-                val isLocal = _state.value.remoteStartMode == RemoteStartMode.LOCAL_KDCAN
-                val casAddr = BmwTargets.CAS.targetAddress
-
-                val result = if (isLocal) {
-                    // LOCAL K+DCAN: use sendRawFrame so we never switch the main session target.
-                    // Using 0x03 (Extended Session) to attempt bypass of key requirement.
-                    val r1 = runCatching { activeSession.sendRawFrame(casAddr, 0x10, listOf(0x03)) }.getOrDefault("ERR")
-                    val r2 = runCatching { activeSession.sendRawFrame(casAddr, 0x3E, listOf(0x00)) }.getOrDefault("ERR")
-                    val r3 = runCatching { activeSession.sendRawFrame(casAddr, 0x31, listOf(0x01, 0x00, 0x04)) }.getOrDefault("ERR")
-                    val ok = r3.contains("71") || r3.contains("51") || r3.isNotEmpty()
-                    val summary = "CAS 0x10→$r1 | 0x3E→$r2 | 0x31→$r3"
-                    ok to summary
-                } else {
-                    // SIM REMOTE: use job-based approach via dedicated session
-                    val casTarget = targets().firstOrNull { it.name == BmwTargets.CAS.name }
-                        ?: error("CAS not in target list")
-                    activeSession.setTarget(casTarget)
-                    val job = BmwJobs.byId("cas_remote_start_sequence") ?: error("Job not found: cas_remote_start_sequence")
-                    val res = activeSession.execute(job)
-                    res.success to res.summary
+                if (!checkRemoteStartSafety(activeSession, logFailure = true)) {
+                    _state.value = _state.value.copy(remoteStartBusy = false)
+                    return@launch
                 }
 
-                val msg = if (result.first) "Start sequence sent OK — ${result.second}"
-                          else "Start FAILED: ${result.second}"
-                _state.value = _state.value.copy(
-                    remoteStartArmed = false,
-                    remoteStartResult = msg,
-                    remoteStartBusy = false,
-                )
-                log(if (result.first) "CAS" else "ERROR", msg)
+                _state.value = _state.value.copy(remoteStartResult = "Sending start sequence…")
+
+                val casTarget = targets().firstOrNull { it.name == BmwTargets.CAS.name }
+                    ?: error("CAS not in target list")
+                activeSession.setTarget(casTarget)
+                val job = BmwJobs.byId("cas_remote_start_sequence") ?: error("Job not found: cas_remote_start_sequence")
+                
+                val res = activeSession.execute(job)
+                
+                if (res.success) {
+                    _state.value = _state.value.copy(
+                        remoteStartResult = "Start command sent. Verifying engine run...",
+                        remoteStartBusy = true
+                    )
+                    // Verification loop: poll RPM for 5 seconds
+                    var started = false
+                    for (i in 1..10) {
+                        delay(500)
+                        val rpmResult = pollEngineRpm(activeSession)
+                        if (rpmResult > 500) {
+                            started = true
+                            break
+                        }
+                    }
+                    
+                    if (started) {
+                        _state.value = _state.value.copy(
+                            remoteStartArmed = false,
+                            remoteStarted = true,
+                            remoteStartResult = "Engine started successfully",
+                            remoteStartBusy = false
+                        )
+                        startSafetyWatchdog()
+                        log("CAS", "Remote start success: Engine running")
+                    } else {
+                        _state.value = _state.value.copy(
+                            remoteStartResult = "Start sequence complete but engine did not run (RPM < 500)",
+                            remoteStartBusy = false
+                        )
+                        log("WARN", "Remote start: Command sent but no combustion detected")
+                    }
+                } else {
+                    _state.value = _state.value.copy(
+                        remoteStartResult = "Start FAILED: ${res.summary}",
+                        remoteStartBusy = false
+                    )
+                    log("ERROR", "Remote start failed: ${res.summary}")
+                }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     remoteStartResult = "Error: ${e.message}",
@@ -1724,54 +1751,137 @@ class MainViewModel(private val application: Application) : ViewModel() {
     }
 
     fun sendRemoteStop() {
-        if (!_state.value.remoteStartArmed) {
-            _state.value = _state.value.copy(remoteStartResult = "Not armed — arm first")
-            return
-        }
         viewModelScope.launch {
             _state.value = _state.value.copy(remoteStartBusy = true, remoteStartResult = "Sending stop sequence…")
             try {
+                stopSafetyWatchdog()
                 val activeSession = remoteStartSession()
                     ?: error(if (_state.value.remoteStartMode == RemoteStartMode.SIM_REMOTE)
-                        "SIM remote not connected — tap Connect via SIM first"
-                    else "Not connected to vehicle via K+DCAN")
+                        "SIM remote not connected"
+                    else "Not connected to vehicle")
 
-                val isLocal = _state.value.remoteStartMode == RemoteStartMode.LOCAL_KDCAN
-                val casAddr = BmwTargets.CAS.targetAddress
+                val casTarget = targets().firstOrNull { it.name == BmwTargets.CAS.name }
+                    ?: error("CAS not in target list")
+                activeSession.setTarget(casTarget)
+                val job = BmwJobs.byId("cas_remote_stop_sequence") ?: error("Job not found: cas_remote_stop_sequence")
+                val res = activeSession.execute(job)
 
-                val result = if (isLocal) {
-                    val r1 = runCatching { activeSession.sendRawFrame(casAddr, 0x10, listOf(0x03)) }.getOrDefault("ERR")
-                    val r2 = runCatching { activeSession.sendRawFrame(casAddr, 0x3E, listOf(0x00)) }.getOrDefault("ERR")
-                    val r3 = runCatching { activeSession.sendRawFrame(casAddr, 0x31, listOf(0x01, 0x00, 0x05)) }.getOrDefault("ERR")
-                    val ok = r3.contains("71") || r3.contains("51") || r3.isNotEmpty()
-                    val summary = "CAS 0x10→$r1 | 0x3E→$r2 | 0x31→$r3"
-                    ok to summary
-                } else {
-                    val casTarget = targets().firstOrNull { it.name == BmwTargets.CAS.name }
-                        ?: error("CAS not in target list")
-                    activeSession.setTarget(casTarget)
-                    val job = BmwJobs.byId("cas_remote_stop_sequence") ?: error("Job not found: cas_remote_stop_sequence")
-                    val res = activeSession.execute(job)
-                    res.success to res.summary
-                }
-
-                val msg = if (result.first) "Stop sequence sent OK — ${result.second}"
-                          else "Stop FAILED: ${result.second}"
+                val msg = if (res.success) "Engine stopped OK" else "Stop FAILED: ${res.summary}"
                 _state.value = _state.value.copy(
                     remoteStartArmed = false,
+                    remoteStarted = false,
                     remoteStartResult = msg,
                     remoteStartBusy = false,
                 )
-                log(if (result.first) "CAS" else "ERROR", msg)
+                log(if (res.success) "CAS" else "ERROR", msg)
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
                     remoteStartResult = "Error: ${e.message}",
                     remoteStartBusy = false,
-                    remoteStartArmed = false,
+                    remoteStarted = false,
                 )
                 log("ERROR", "Remote stop: ${e.message}")
             }
         }
+    }
+
+    private suspend fun checkRemoteStartSafety(session: KdcanSession, logFailure: Boolean): Boolean {
+        // We need to poll multiple modules to get a full safety picture
+        val safetyResults = mutableMapOf<String, String>()
+
+        // 1. Poll DME for battery voltage
+        val dmeRes = runCatching { session.execute(BmwJobs.byId("dme_live_basic")!!) }.getOrNull()
+        dmeRes?.decoded?.let { safetyResults.putAll(it) }
+
+        // 2. Poll EGS for Gear position
+        session.setTarget(BmwTargets.EGS)
+        val egsRes = runCatching { session.execute(BmwJobs.byId("egs_live_basic")!!) }.getOrNull()
+        egsRes?.decoded?.let { safetyResults.putAll(it) }
+
+        // 3. Poll CAS for Terminal status (includes some hood/brake signals on some E60 variants)
+        session.setTarget(BmwTargets.CAS)
+        val casRes = runCatching { session.execute(BmwJobs.byId("cas_live_terminals")!!) }.getOrNull()
+        casRes?.decoded?.let { safetyResults.putAll(it) }
+
+        // Map raw values to safety flags
+        val gearRaw = safetyResults["EGS basic live 0x01:selector_position_raw"]?.toIntOrNull() ?: 0
+        // E60 EGS: P is usually 0x01 or 0x02. 0x01 is common for GS19.
+        val gearP = gearRaw == 1 || gearRaw == 2 || safetyResults["EGS basic live 0x01:selector_position_raw"]?.contains("P") == true
+        
+        // Hood status is often in CAS terminal flags or specialized FRM blocks. 
+        // Heuristic: check terminal_flags bit 5 (often used for hood/trunk inhibit)
+        val termFlags = safetyResults["CAS terminal block 0x01:terminal_flags"] ?: "00000000"
+        val hoodClosed = termFlags.length > 5 && termFlags[5] == '0'
+            
+        // Brake status can be in DSC or DME. DME basic block 0x01 doesn't have it, but DSC status 0x01 does.
+        session.setTarget(BmwTargets.DSC)
+        val dscRes = runCatching { session.execute(BmwJobs.byId("dsc_live_status")!!) }.getOrNull()
+        val brakePressed = dscRes?.decoded?.get("DSC status 0x01:status_flags_1")?.let { it.length > 0 && it[0] == '1' } ?: false
+        val brakeReleased = !brakePressed
+        
+        val voltage = safetyResults["DME basic live 0x01:battery_v"]?.toDoubleOrNull() ?: 12.0
+        val voltageOk = voltage > 11.5
+
+        _state.value = _state.value.copy(
+            safetyGearP = gearP,
+            safetyHoodClosed = hoodClosed,
+            safetyBrakeReleased = brakeReleased,
+            safetyVoltageOk = voltageOk
+        )
+
+        if (!gearP || !hoodClosed || !brakeReleased || !voltageOk) {
+            if (logFailure) {
+                val reasons = mutableListOf<String>()
+                if (!gearP) reasons.add("Gear not in P (Raw: $gearRaw)")
+                if (!hoodClosed) reasons.add("Hood open or inhibited")
+                if (!brakeReleased) reasons.add("Brake pressed")
+                if (!voltageOk) reasons.add("Low voltage (%.1fV)".format(voltage))
+                val msg = "Safety Interlock: ${reasons.joinToString(", ")}"
+                _state.value = _state.value.copy(remoteStartResult = msg)
+                log("WARN", msg)
+            }
+            return false
+        }
+        return true
+    }
+
+    private suspend fun pollEngineRpm(session: KdcanSession): Int {
+        val dmeTarget = targets().firstOrNull { it.name == BmwTargets.DME.name } ?: return 0
+        session.setTarget(dmeTarget)
+        val job = BmwJobs.byId("dme_live_basic") ?: return 0
+        val res = runCatching { session.execute(job) }.getOrNull()
+        val rpmStr = res?.decoded?.get("DME basic live 0x01: engine_speed_rpm") ?: "0"
+        val rpm = rpmStr.substringBefore(" ").toDoubleOrNull()?.toInt() ?: 0
+        _state.value = _state.value.copy(safetyRpm = rpm)
+        return rpm
+    }
+
+    private fun startSafetyWatchdog() {
+        safetyWatchdogJob?.cancel()
+        safetyWatchdogJob = viewModelScope.launch {
+            log("CAS", "Safety watchdog active")
+            while (_state.value.remoteStarted) {
+                delay(2000)
+                val activeSession = remoteStartSession() ?: break
+                if (!checkRemoteStartSafety(activeSession, logFailure = false)) {
+                    log("WARN", "Safety violation detected! Emergency stopping...")
+                    sendRemoteStop()
+                    break
+                }
+                // Also check if engine stalled
+                val rpm = pollEngineRpm(activeSession)
+                if (rpm < 400) {
+                    log("WARN", "Engine stall detected. Disarming.")
+                    _state.value = _state.value.copy(remoteStarted = false, remoteStartResult = "Engine stalled")
+                    break
+                }
+            }
+        }
+    }
+
+    private fun stopSafetyWatchdog() {
+        safetyWatchdogJob?.cancel()
+        safetyWatchdogJob = null
     }
     fun applyWarningSuppression(presetKind: CodingPresetKind) {
         val preset = DatenManager.preset(presetKind)
@@ -2012,6 +2122,87 @@ class MainViewModel(private val application: Application) : ViewModel() {
                     tuningLiveBusy = false
                 )
                 log("TUNE", "Map write complete (Simulation)")
+            }
+        }
+    }
+
+    fun runInjectionAction(action: CanInjector.InjectableAction) {
+        viewModelScope.launch {
+            runBusy {
+                _state.value = _state.value.copy(injectionBusy = true, injectionResult = "Injecting ${action.label}...")
+                val activeSession = session ?: simSession
+                if (activeSession == null) {
+                    _state.value = _state.value.copy(
+                        injectionBusy = false,
+                        injectionResult = "Not connected to vehicle or SIM bridge."
+                    )
+                    return@runBusy
+                }
+
+                val res = CanInjector.inject(activeSession, action)
+                _state.value = _state.value.copy(
+                    injectionBusy = false,
+                    injectionResult = "${action.label}: ${if (res.success) "Success" else "Failed (${res.summary})"}"
+                )
+                log(if (res.success) "INFO" else "ERROR", "Injection ${action.label}: ${res.summary}")
+            }
+        }
+    }
+
+    fun runInjectionMacro(macro: CanInjector.InjectionMacro) {
+        viewModelScope.launch {
+            runBusy {
+                _state.value = _state.value.copy(injectionBusy = true, injectionResult = "Starting Macro: ${macro.label}...")
+                val activeSession = session ?: simSession
+                if (activeSession == null) {
+                    _state.value = _state.value.copy(
+                        injectionBusy = false,
+                        injectionResult = "Not connected for macro execution."
+                    )
+                    return@runBusy
+                }
+
+                for ((index, actionId) in macro.actions.withIndex()) {
+                    val action = CanInjector.ACTIONS.find { it.id == actionId }
+                    if (action == null) {
+                        log("ERROR", "Macro ${macro.id}: Action $actionId not found")
+                        continue
+                    }
+
+                    _state.value = _state.value.copy(injectionResult = "Macro [${index + 1}/${macro.actions.size}]: ${action.label}...")
+                    val res = CanInjector.inject(activeSession, action)
+                    
+                    if (!res.success) {
+                        log("ERROR", "Macro ${macro.id} failed at ${action.label}: ${res.summary}")
+                        _state.value = _state.value.copy(
+                            injectionBusy = false,
+                            injectionResult = "Macro Failed: ${action.label}"
+                        )
+                        return@runBusy
+                    }
+
+                    if (index < macro.actions.size - 1) {
+                        delay(macro.delayBetweenMs)
+                    }
+                }
+
+                _state.value = _state.value.copy(
+                    injectionBusy = false,
+                    injectionResult = "Macro Complete: ${macro.label}"
+                )
+                log("INFO", "Macro ${macro.label} executed successfully")
+            }
+        }
+    }
+
+    fun injectRawCanFrame(messageName: String, payloadHex: String) {
+        viewModelScope.launch {
+            val message = E60CanBus.byName(messageName) ?: return@launch
+            val payload = HexUtils.hexToBytes(payloadHex).map { it.toInt() and 0xFF }
+            val activeSession = session ?: simSession
+            if (activeSession != null) {
+                val res = CanInjector.sendRawCanFrame(activeSession, message, payload)
+                log("INFO", "Raw CAN Inject 0x${message.id.toString(16)}: $res")
             }
         }
     }

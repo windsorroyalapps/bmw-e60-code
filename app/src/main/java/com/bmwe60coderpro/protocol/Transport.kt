@@ -8,5 +8,7 @@ interface Transport {
     suspend fun disconnect()
     suspend fun write(bytes: ByteArray)
     suspend fun read(timeoutMs: Int = 1200): ByteArray
+    /** Clear any stale data from the adapter's RX buffer. */
+    suspend fun purge()
     fun isConnected(): Boolean
 }

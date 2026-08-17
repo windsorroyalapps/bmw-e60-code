@@ -3,6 +3,8 @@ package com.bmwe60coderpro.protocol
 import com.bmwe60coderpro.data.VehicleProfileKind
 import com.bmwe60coderpro.util.HexUtils
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class KdcanSession(
     private val transport: Transport,
@@ -10,6 +12,7 @@ class KdcanSession(
     private var vehicleProfile: VehicleProfileKind = VehicleProfileKind.GENERIC_E60,
     private val testerAddress: Int = 0xF1,
 ) {
+    private val mutex = Mutex()
     fun getTransport(): Transport = transport
     private var commProfile: CommProfile = BmwCommProfiles.forTarget(target, vehicleProfile)
     fun setTarget(target: EcuTarget) {
@@ -30,11 +33,11 @@ class KdcanSession(
 
     fun getTarget(): EcuTarget = target
 
-    suspend fun sendRawHex(hex: String): String {
+    suspend fun sendRawHex(hex: String): String = mutex.withLock {
         val bytes = HexUtils.hexToBytes(hex)
         transport.write(bytes)
         delay(commProfile.interFrameDelayMs)
-        val response = transport.read(commProfile.requestTimeoutMs)
+        val response = readDiscardingEcho(bytes, commProfile.requestTimeoutMs)
         return HexUtils.bytesToHex(response)
     }
 
@@ -42,7 +45,7 @@ class KdcanSession(
      * Build and send a raw KWP frame to an arbitrary target without changing session state.
      * Used for real-time controller injection where we must not switch the session target.
      */
-    suspend fun sendRawFrame(targetAddress: Int, serviceId: Int, payload: List<Int>): String {
+    suspend fun sendRawFrame(targetAddress: Int, serviceId: Int, payload: List<Int>): String = mutex.withLock {
         val data = mutableListOf(serviceId and 0xFF)
         data.addAll(payload.map { it and 0xFF })
         val format = 0x80 or (data.size and 0x3F)
@@ -52,7 +55,7 @@ class KdcanSession(
         val frame = withoutChecksum.plus(checksum).map { (it and 0xFF).toByte() }.toByteArray()
         transport.write(frame)
         delay(commProfile.interFrameDelayMs)
-        val response = transport.read(commProfile.requestTimeoutMs)
+        val response = readDiscardingEcho(frame, commProfile.requestTimeoutMs)
         return HexUtils.bytesToHex(response)
     }
 
@@ -66,14 +69,18 @@ class KdcanSession(
         }
     }
 
-    suspend fun execute(job: BmwJob): JobResult {
+    suspend fun execute(job: BmwJob): JobResult = mutex.withLock {
         val stepResults = mutableListOf<StepResult>()
+        
+        // Purge any stale data from previous jobs or failed reads
+        runCatching { transport.purge() }
+
         if (commProfile.autoTesterPresentBeforeJob && job.category != JobCategory.SESSION) {
             runCatching {
                 val keepAliveRequest = buildFrame(0x3E, listOf(0x00))
                 transport.write(keepAliveRequest)
                 delay(commProfile.interFrameDelayMs)
-                transport.read(commProfile.requestTimeoutMs.coerceAtMost(900))
+                readDiscardingEcho(keepAliveRequest, commProfile.requestTimeoutMs.coerceAtMost(900))
             }
         }
         if (commProfile.preJobDelayMs > 0) delay(commProfile.preJobDelayMs)
@@ -81,9 +88,13 @@ class KdcanSession(
             val request = buildFrame(step.serviceId, step.payload)
             var lastResult: StepResult? = null
             for (attempt in 0..commProfile.retries) {
+                if (attempt > 0) {
+                    // Purge before retry to clear whatever caused the previous failure
+                    runCatching { transport.purge() }
+                }
                 transport.write(request)
                 delay(commProfile.interFrameDelayMs)
-                val response = transport.read(commProfile.requestTimeoutMs)
+                val response = readDiscardingEcho(request, commProfile.requestTimeoutMs)
                 val result = parseStepResponse(request, response, step, job, attempt)
                 lastResult = result
                 val shouldRetry = !result.success && attempt < commProfile.retries && shouldRetry(result)
@@ -110,6 +121,9 @@ class KdcanSession(
                 put("comm_timeout_ms", commProfile.requestTimeoutMs.toString())
                 put("comm_retries", commProfile.retries.toString())
                 put("comm_inter_frame_ms", commProfile.interFrameDelayMs.toString())
+                // First add all decoded fields without prefix for easy UI access
+                stepResults.forEach { step -> putAll(step.decoded) }
+                // Then add prefixed versions for disambiguation
                 putAll(stepResults.flatMap { step ->
                     step.decoded.map { (k, v) -> "${step.label}:$k" to v }
                 }.toMap())
@@ -207,6 +221,36 @@ class KdcanSession(
             val c = it.toChar()
             if (c.code in 32..126) c else null
         }.joinToString("")
+    }
+
+    /**
+     * Reads from transport while identifying and discarding the echoed request frame.
+     * K-Line adapters often echo the transmitted frame back to the host.
+     */
+    private suspend fun readDiscardingEcho(request: ByteArray, timeoutMs: Int): ByteArray {
+        val response = transport.read(timeoutMs)
+        
+        // If the response starts exactly with the request, it's a bus echo
+        if (response.size >= request.size && 
+            response.sliceArray(0 until request.size).contentEquals(request)) {
+            
+            val remaining = response.copyOfRange(request.size, response.size)
+            if (remaining.isNotEmpty()) return remaining
+            
+            // If the buffer only contained the echo, read again for the actual response
+            return transport.read(timeoutMs)
+        }
+        
+        // Handle partial echo if the first read was too short
+        if (response.isNotEmpty() && response.size < request.size && 
+            request.sliceArray(0 until response.size).contentEquals(response)) {
+            
+            // Consume the rest of the echo and then read the response
+            transport.read(timeoutMs) 
+            return transport.read(timeoutMs)
+        }
+
+        return response
     }
 }
 

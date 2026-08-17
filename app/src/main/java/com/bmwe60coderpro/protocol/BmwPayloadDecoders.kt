@@ -453,6 +453,7 @@ object BmwPayloadDecoders {
     }
 
     private fun u16(data: List<Int>, index: Int): Int? {
+        // Safe retrieval of two bytes for big-endian 16-bit integer construction
         val hi = data.getOrNull(index) ?: return null
         val lo = data.getOrNull(index + 1) ?: return null
         return ((hi and 0xFF) shl 8) or (lo and 0xFF)

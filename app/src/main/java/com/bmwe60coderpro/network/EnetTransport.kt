@@ -68,6 +68,13 @@ class EnetTransport(
         if (count > 0) buffer.copyOf(count) else ByteArray(0)
     }
 
+    override suspend fun purge() = withContext(Dispatchers.IO) {
+        val inp = socket?.getInputStream() ?: return@withContext
+        if (inp.available() > 0) {
+            inp.skip(inp.available().toLong())
+        }
+    }
+
     override fun isConnected(): Boolean = connected
 
     /** Build a BMW-FAST frame for ENET. */
@@ -94,15 +101,15 @@ class EnetTransport(
      * Returns (target, payload) or null when the buffer is incomplete / invalid.
      */
     fun parseFastFrame(data: ByteArray): Pair<Int, ByteArray>? {
-        // Minimum header size is 4 bytes
+        // ENET header is 4 bytes: [LEN_HI, LEN_LO, TARGET, SOURCE]
         if (data.size < 4) return null
-
+        
         val length = ((data[0].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)
         // Sanity: reject absurd lengths (BMW diagnostic payloads are typically < 4 KB)
         if (length < 0 || length > 4096) return null
 
         val target = data[2].toInt() and 0xFF
-        // Source is data[3] — kept for future routing; not returned by this helper
+        // val source = data[3].toInt() and 0xFF // Source available if needed
 
         // Incomplete frame — wait for more data
         if (data.size < 4 + length) return null
