@@ -242,20 +242,43 @@ object XboxControllerManager {
         )
     }
 
-    /** Scan attached input devices and return a gamepad descriptor if one is present. */
+    /**
+     * Scan attached input devices and return the best gamepad/joystick.
+     * Prefers Microsoft Xbox controllers (VID 0x045E) then any SOURCE_GAMEPAD,
+     * then SOURCE_JOYSTICK. Returns null when nothing usable is attached.
+     */
     fun findAttachedController(): InputDevice? {
         val ids = InputDevice.getDeviceIds()
+        var best: InputDevice? = null
+        var bestScore = -1
         for (id in ids) {
-            val device = InputDevice.getDevice(id)
-            if (device != null) {
-                val src = device.sources
-                val isGamepad = (src and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
-                val isJoystick = (src and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
-                if (isGamepad || isJoystick) {
-                    return device
-                }
+            val device = InputDevice.getDevice(id) ?: continue
+            // Skip virtual / built-in devices that are not real controllers
+            if (device.isVirtual) continue
+            val src = device.sources
+            val isGamepad = (src and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+            val isJoystick = (src and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+            if (!isGamepad && !isJoystick) continue
+
+            var score = 0
+            if (isGamepad) score += 10
+            if (isJoystick) score += 5
+            // Prefer Microsoft (Xbox) VID 0x045E and common 8BitDo / Sony pads
+            when (device.vendorId) {
+                0x045E -> score += 20  // Microsoft
+                0x054C -> score += 15  // Sony
+                0x057E -> score += 12  // Nintendo
+                0x2DC8 -> score += 10  // 8BitDo
+            }
+            // Prefer devices that report a real name
+            if (!device.name.isNullOrBlank() && !device.name.contains("Virtual", ignoreCase = true)) {
+                score += 3
+            }
+            if (score > bestScore) {
+                bestScore = score
+                best = device
             }
         }
-        return null
+        return best
     }
 }
