@@ -9,6 +9,7 @@ import com.hoho.android.usbserial.driver.UsbSerialProber
 import com.bmwe60coderpro.data.DeviceInfo
 import com.bmwe60coderpro.protocol.Transport
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 private const val TAG = "UsbSerialTransport"
@@ -89,11 +90,21 @@ class UsbSerialTransport(
                 
                 try {
                     port?.open(connection)
+                    // Standard K+DCAN speed is 500k for D-CAN or 9600/10400 for K-Line
+                    // But the FTDI chip itself usually talks at 115200 or 230400 to the host
                     port?.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                    
+                    // Critical for K+DCAN stability: 
+                    // Set Latency Timer to 1ms (if supported) via vendor request or assume it's set
+                    // We also need to ensure buffers are clear
                     port?.dtr = true
                     port?.rts = true
+                    
                     connected = true
                     Log.i(TAG, "SUCCESS: Connected to ${device.deviceName}")
+                    
+                    // Extra settle time after opening port
+                    delay(100)
                     return@withContext
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to configure ${device.deviceName}: ${e.message}")
@@ -127,8 +138,17 @@ class UsbSerialTransport(
 
     override suspend fun read(timeoutMs: Int): ByteArray = withContext(Dispatchers.IO) {
         val buffer = ByteArray(4096)
-        val count = port?.read(buffer, timeoutMs) ?: 0
-        buffer.copyOf(count.coerceAtLeast(0))
+        val start = System.currentTimeMillis()
+        
+        // K+DCAN can be bursty, try to read until we get something or timeout
+        while (System.currentTimeMillis() - start < timeoutMs) {
+            val count = try { port?.read(buffer, 50) ?: 0 } catch(e: Exception) { 0 }
+            if (count > 0) {
+                return@withContext buffer.copyOf(count)
+            }
+            delay(5) // Small yield
+        }
+        byteArrayOf()
     }
 
     override suspend fun purge() = withContext(Dispatchers.IO) {

@@ -228,8 +228,18 @@ class KdcanSession(
      * K-Line adapters often echo the transmitted frame back to the host.
      */
     private suspend fun readDiscardingEcho(request: ByteArray, timeoutMs: Int): ByteArray {
-        val response = transport.read(timeoutMs)
+        var response = transport.read(timeoutMs)
         
+        // If response is exactly the echo, or starts with the echo, we need to handle it.
+        // K+DCAN sometimes sends the echo in chunks.
+        val start = System.currentTimeMillis()
+        while (response.size < request.size && System.currentTimeMillis() - start < 500) {
+            val chunk = transport.read(100)
+            if (chunk.isEmpty()) break
+            response += chunk
+            if (response.size >= request.size) break
+        }
+
         // If the response starts exactly with the request, it's a bus echo
         if (response.size >= request.size && 
             response.sliceArray(0 until request.size).contentEquals(request)) {

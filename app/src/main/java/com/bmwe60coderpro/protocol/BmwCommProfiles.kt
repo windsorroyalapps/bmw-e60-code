@@ -16,12 +16,12 @@ data class CommProfile(
 object BmwCommProfiles {
     private val defaultProfile = CommProfile(
         name = "BMW Generic",
-        requestTimeoutMs = 1400,
-        retries = 1,
-        interFrameDelayMs = 40,
-        postConnectDelayMs = 250,
-        preJobDelayMs = 20,
-        autoTesterPresentBeforeJob = false,
+        requestTimeoutMs = 2000,
+        retries = 3,
+        interFrameDelayMs = 60,
+        postConnectDelayMs = 500,
+        preJobDelayMs = 50,
+        autoTesterPresentBeforeJob = true,
         recommendExtendedSession = false,
     )
 

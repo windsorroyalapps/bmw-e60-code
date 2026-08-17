@@ -1,9 +1,22 @@
 -- Merging decision tree log ---
+provider#androidx.core.content.FileProvider
+INJECTED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:66:13-74:20
+INJECTED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:75:13-83:20
+	android:grantUriPermissions
+		ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:70:13-47
+	android:authorities
+		INJECTED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml
+		INJECTED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml
+		ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:68:13-64
+	android:exported
+		ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:69:13-37
+	android:name
+		ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:67:13-62
 manifest
-ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:2:1-67:12
-INJECTED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:2:1-67:12
-INJECTED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:2:1-67:12
-INJECTED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:2:1-67:12
+ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:2:1-85:12
+INJECTED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:2:1-85:12
+INJECTED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:2:1-85:12
+INJECTED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:2:1-85:12
 MERGED from [com.google.android.material:material:1.12.0] C:\Users\troyb\.gradle\caches\transforms-4\4bb58a54ad6ecbd1d70cba19902964d8\transformed\material-1.12.0\AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\troyb\.gradle\caches\transforms-4\b8bbaf8496661ac976d98f6b2ad2e5e9\transformed\constraintlayout-2.0.1\AndroidManifest.xml:2:1-11:12
 MERGED from [androidx.appcompat:appcompat-resources:1.6.1] C:\Users\troyb\.gradle\caches\transforms-4\8f62d5822fd9bdf86582a149ae82e80b\transformed\appcompat-resources-1.6.1\AndroidManifest.xml:17:1-22:12
@@ -152,7 +165,7 @@ ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\Androi
 	android:name
 		ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:29:19-58
 application
-ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:31:5-66:19
+ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:31:5-84:19
 MERGED from [com.google.android.material:material:1.12.0] C:\Users\troyb\.gradle\caches\transforms-4\4bb58a54ad6ecbd1d70cba19902964d8\transformed\material-1.12.0\AndroidManifest.xml:22:5-20
 MERGED from [com.google.android.material:material:1.12.0] C:\Users\troyb\.gradle\caches\transforms-4\4bb58a54ad6ecbd1d70cba19902964d8\transformed\material-1.12.0\AndroidManifest.xml:22:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.0.1] C:\Users\troyb\.gradle\caches\transforms-4\b8bbaf8496661ac976d98f6b2ad2e5e9\transformed\constraintlayout-2.0.1\AndroidManifest.xml:9:5-20
@@ -231,6 +244,12 @@ ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\Androi
 		ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:63:13-60
 	android:name
 		ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:62:13-54
+meta-data#android.support.FILE_PROVIDER_PATHS
+ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:71:13-73:54
+	android:resource
+		ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:73:17-51
+	android:name
+		ADDED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml:72:17-67
 uses-sdk
 INJECTED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from C:\Users\troyb\AndroidStudioProjects\bmw-e60-code\app\src\main\AndroidManifest.xml

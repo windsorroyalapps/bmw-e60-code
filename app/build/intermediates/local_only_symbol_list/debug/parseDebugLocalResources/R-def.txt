@@ -18,3 +18,4 @@ string app_name
 style Theme.BMWE60CoderPro
 xml backup_rules
 xml device_filter
+xml file_paths

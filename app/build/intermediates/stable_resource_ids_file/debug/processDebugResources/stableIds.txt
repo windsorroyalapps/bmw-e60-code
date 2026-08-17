@@ -5131,6 +5131,7 @@ com.bmwe60coderpro:color/material_personalized_color_surface_container_highest =
 com.bmwe60coderpro:attr/placeholder_emptyVisibility = 0x7f030355
 com.bmwe60coderpro:style/Base.Widget.Material3.CompoundButton.Switch = 0x7f100105
 com.bmwe60coderpro:attr/marginTopSystemWindowInsets = 0x7f0302b2
+com.bmwe60coderpro:xml/file_paths = 0x7f120002
 com.bmwe60coderpro:attr/deltaPolarRadius = 0x7f030160
 com.bmwe60coderpro:attr/layout_keyline = 0x7f030290
 com.bmwe60coderpro:color/m3_ref_palette_error40 = 0x7f050102
