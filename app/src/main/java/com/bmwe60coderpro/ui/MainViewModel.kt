@@ -583,6 +583,80 @@ class MainViewModel(private val application: Application) : ViewModel() {
         file.writeText(export)
         log("INFO", "Key slot ${detail.slotNumber} exported to ${file.absolutePath} (${export.length} chars)")
     }
+    fun exportKeyDataToJson(): String {
+        val result = _state.value.keyDataResult ?: return "{}"
+        val json = org.json.JSONObject()
+        json.put("source", "bmw-e60-code")
+        json.put("exportType", "cas_key_data")
+        json.put("exportDate", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date()))
+        json.put("isn", result.isn)
+        json.put("vin", result.vin)
+        json.put("moduleVersion", result.moduleVersion)
+        json.put("keyCount", result.keyCount)
+        val slotsArray = org.json.JSONArray()
+        result.keySlots.forEach { slot ->
+            val slotObj = org.json.JSONObject()
+            slotObj.put("slotNumber", slot.slotNumber)
+            slotObj.put("keyPresent", slot.keyPresent)
+            slotObj.put("keyId", slot.keyId)
+            slotObj.put("keyStatus", slot.keyStatus)
+            slotObj.put("keyType", slot.keyType)
+            slotsArray.put(slotObj)
+        }
+        json.put("keySlots", slotsArray)
+        return json.toString(2)
+    }
+
+    fun exportKeyDataForAk90(): String {
+        val result = _state.value.keyDataResult ?: return "{}"
+        val detail = _state.value.keySlotDetail
+        val ak90Json = org.json.JSONObject()
+        ak90Json.put("format", "ak90-plus-v1")
+        ak90Json.put("sourceApp", "bmw-e60-code")
+        ak90Json.put("exportDate", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date()))
+        val vehicleObj = org.json.JSONObject()
+        vehicleObj.put("vin", result.vin)
+        vehicleObj.put("isn", result.isn)
+        vehicleObj.put("moduleVersion", result.moduleVersion)
+        vehicleObj.put("casType", "CAS3")
+        ak90Json.put("vehicle", vehicleObj)
+        val keysArray = org.json.JSONArray()
+        result.keySlots.forEach { slot ->
+            val keyObj = org.json.JSONObject()
+            keyObj.put("slot", slot.slotNumber)
+            keyObj.put("present", slot.keyPresent)
+            keyObj.put("id", slot.keyId)
+            keyObj.put("status", slot.keyStatus)
+            keyObj.put("type", slot.keyType)
+            if (detail != null && detail.slotNumber == slot.slotNumber) {
+                keyObj.put("transponderType", detail.transponderType)
+                keyObj.put("transponderId", detail.transponderId)
+                keyObj.put("keyTrack", detail.keyTrack)
+                keyObj.put("keyDataHex", detail.keyDataHex)
+                keyObj.put("isValid", detail.isValid)
+            }
+            keysArray.put(keyObj)
+        }
+        ak90Json.put("keys", keysArray)
+        ak90Json.put("totalKeys", result.keyCount)
+        return ak90Json.toString(2)
+    }
+
+    fun saveKeyDataToFile(context: android.content.Context, format: String = "ak90") {
+        val json = if (format == "ak90") exportKeyDataForAk90() else exportKeyDataToJson()
+        val filename = if (format == "ak90") "ak90_export_${System.currentTimeMillis()}.json" else "e60_keys_${System.currentTimeMillis()}.json"
+        try {
+            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val file = java.io.File(downloadsDir, filename)
+            file.writeText(json)
+            log("INFO", "Saved to Downloads: ${file.absolutePath}")
+            _state.value = _state.value.copy(keyDataError = "", dashboardStatus = "Saved: $filename")
+        } catch (e: Exception) {
+            log("ERROR", "Save failed: ${e.message}")
+            _state.value = _state.value.copy(keyDataError = "Save failed: ${e.message}")
+        }
+    }
+
     fun refreshDevices() {
         viewModelScope.launch {
             runBusy {

@@ -1585,6 +1585,20 @@ private fun DedicatedServiceModuleCard(vm: MainViewModel, state: AppState, def: 
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text("Export Key Data")
+                                }
+                                OutlinedButton(
+                                    onClick = { vm.saveKeyDataToFile(context, "ak90") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    enabled = !state.keyDataBusy
+                                ) {
+                                    Text("📲 Export for AK90+")
+                                }
+                                OutlinedButton(
+                                    onClick = { vm.saveKeyDataToFile(context, "ak90") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    enabled = !state.keyDataBusy
+                                ) {
+                                    Text("📤 Share to AK90+")
                             }
                         }
                     }
