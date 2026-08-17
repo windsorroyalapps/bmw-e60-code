@@ -12,8 +12,8 @@ android {
         applicationId = "com.bmwe60coderpro"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 1
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -23,35 +23,22 @@ android {
 
     signingConfigs {
         create("release") {
-            val keystorePath = System.getenv("KEYSTORE_PATH") ?: "release.keystore"
-            val storeFilePath = file(keystorePath)
-            if (storeFilePath.exists()) {
-                storeFile = storeFilePath
-                storePassword = System.getenv("KEY_STORE_PASSWORD") ?: ""
-                keyAlias = System.getenv("KEY_ALIAS") ?: "key0"
-                keyPassword = System.getenv("KEY_PASSWORD") ?: ""
-            }
+            storeFile = file(System.getenv("KEYSTORE_PATH") ?: "release.keystore")
+            storePassword = System.getenv("KEY_STORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("KEY_ALIAS") ?: ""
+            keyPassword = System.getenv("KEY_PASSWORD") ?: ""
         }
     }
 
     buildTypes {
         release {
-            // Only attach signingConfig when a real keystore is present
-            val keystorePath = System.getenv("KEYSTORE_PATH") ?: "release.keystore"
-            if (file(keystorePath).exists()) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-        }
-        debug {
-            isMinifyEnabled = false
-            applicationIdSuffix = ".debug"
-            versionNameSuffix = "-debug"
         }
     }
     compileOptions {
