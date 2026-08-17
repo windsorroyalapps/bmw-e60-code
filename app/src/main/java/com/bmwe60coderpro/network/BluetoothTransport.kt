@@ -121,6 +121,13 @@ class BluetoothTransport(
         }
     }
 
+    override suspend fun purge() = withContext(Dispatchers.IO) {
+        val inp = inputStream ?: return@withContext
+        if (inp.available() > 0) {
+            inp.skip(inp.available().toLong())
+        }
+    }
+
     fun getConnectedDeviceMac(): String = if (connected) resolvedAddress else ""
     fun getConnectedDeviceName(): String = if (connected) connectedDeviceName else ""
     fun getElmVersion(): String = elmVersion

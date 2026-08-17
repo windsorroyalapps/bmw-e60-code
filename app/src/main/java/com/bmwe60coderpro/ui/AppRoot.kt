@@ -59,6 +59,7 @@ import com.bmwe60coderpro.protocol.CanInjector
 import com.bmwe60coderpro.protocol.E60CanBus
 import com.bmwe60coderpro.protocol.MflInjector
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.background
@@ -1748,6 +1749,7 @@ private fun TransportCompactCard(state: AppState, vm: MainViewModel) {
 
 @Composable
 private fun DedicatedServiceModuleCard(vm: MainViewModel, state: AppState, def: ServiceScreenDefinition, snapshot: ModuleSnapshot?) {
+    val context = LocalContext.current
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(def.title, style = MaterialTheme.typography.titleLarge)
@@ -1847,34 +1849,13 @@ private fun DedicatedServiceModuleCard(vm: MainViewModel, state: AppState, def: 
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Text("Export Key Data")
-                                }
-                                OutlinedButton(
-                                    onClick = { vm.saveKeyDataToFile(context, "ak90") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    enabled = !state.keyDataBusy
-                                ) {
-                                    Text("📲 Export for AK90+")
-                                }
-                                OutlinedButton(
-                                    onClick = { vm.saveKeyDataToFile(context, "ak90") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    enabled = !state.keyDataBusy
-                                ) {
-                                    Text("📤 Share to AK90+")
-                                }
-                                OutlinedButton(
-                                    onClick = { vm.saveKeyDataToFile(context, "ak90") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    enabled = !state.keyDataBusy
-                                ) {
-                                    Text("📲 Export for AK90+")
-                                }
-                                OutlinedButton(
-                                    onClick = { vm.saveKeyDataToFile(context, "ak90") },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    enabled = !state.keyDataBusy
-                                ) {
-                                    Text("📤 Share to AK90+")
+                            }
+                            OutlinedButton(
+                                onClick = { vm.saveKeyDataToFile(context, "ak90") },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !state.keyDataBusy
+                            ) {
+                                Text("📲 Export for AK90+")
                             }
                         }
                     }
