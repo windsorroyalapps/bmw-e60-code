@@ -2,6 +2,8 @@
 
 Cross-platform mobile app for BMW E60/E61 vehicle tuning and diagnostics via OBD2/CAN bus.
 
+**Android / BMW hacking genius edition** — production APK ready via GitHub Actions.
+
 ## Features
 
 - **KWP2000/BMW-FAST Protocol** — Full diagnostic session management
@@ -28,17 +30,36 @@ Cross-platform mobile app for BMW E60/E61 vehicle tuning and diagnostics via OBD
 
 ## Building
 
-Requires Android Studio with JDK 17.
+Requires Android Studio / JDK 17 + Android SDK.
 
 ```bash
-./gradlew assembleRelease
+# Preferred (wrapper)
+./gradlew assembleDebug
+./gradlew assembleRelease   # needs keystore secrets or local release.keystore
+
+# Or with system Gradle 8.7+
+gradle assembleDebug
 ```
 
-APK is signed automatically via GitHub Actions.
+APK artifacts are produced automatically by GitHub Actions on every push to `main`.
+
+- Debug APK: always uploaded
+- Release APK: uploaded when signing secrets are configured
+
+### GitHub Secrets for signed release
+
+| Secret | Description |
+|--------|-------------|
+| `KEYSTORE_PATH` | Path to keystore inside runner (or upload as artifact) |
+| `KEY_STORE_PASSWORD` | Keystore password |
+| `KEY_ALIAS` | Key alias |
+| `KEY_PASSWORD` | Key password |
 
 ## Safety Warning
 
 This is an experimental research tool. Never use while vehicle is in motion without a co-pilot. All injection is disabled by default and requires explicit arming.
+
+**Use at your own risk.** Incorrect coding can brick modules. Always backup original coding data first.
 
 ## License
 
