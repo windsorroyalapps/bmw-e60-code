@@ -104,19 +104,29 @@ class Elm327Transport(
     }
 
     private fun readRawResponse(timeoutMs: Int): String {
+        // Return empty when stream is not yet open (pre-connect / post-disconnect)
         val inp = input ?: return ""
         val buffer = StringBuilder()
         val start = System.currentTimeMillis()
+        var consecutiveEmpty = 0
         while (System.currentTimeMillis() - start < timeoutMs) {
-            if (inp.available() > 0) {
-                val b = inp.read()
-                if (b == '>'.code) break // ELM prompt
-                if (b >= 0) buffer.append(b.toChar())
+            val available = try { inp.available() } catch (_: Exception) { 0 }
+            if (available > 0) {
+                consecutiveEmpty = 0
+                val b = try { inp.read() } catch (_: Exception) { -1 }
+                if (b < 0) break
+                if (b == '>'.code) break // ELM327 prompt — response complete
+                // Skip null bytes and non-printable noise except CR/LF
+                if (b == '\r'.code || b == '\n'.code || b in 32..126) {
+                    buffer.append(b.toChar())
+                }
             } else {
-                Thread.sleep(10)
+                consecutiveEmpty++
+                // Adaptive sleep: short when data may arrive soon, longer when idle
+                Thread.sleep(if (consecutiveEmpty < 5) 5L else 15L)
             }
         }
-        return buffer.toString()
+        return buffer.toString().trim()
     }
 
     private fun parseElmResponse(raw: String): ByteArray {
@@ -173,4 +183,3 @@ class Elm327Transport(
 
     fun getElmVersion(): String = elmVersion
 }
-
