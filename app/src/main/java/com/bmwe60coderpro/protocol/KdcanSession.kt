@@ -6,6 +6,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
+/** How long a single follow-up chunk read may block while assembling a frame. */
+private const val FRAME_CHUNK_TIMEOUT_MS = 300L
+
 class KdcanSession(
     private val transport: Transport,
     private var target: EcuTarget = BmwTargets.DME,
@@ -223,43 +226,82 @@ class KdcanSession(
         }.joinToString("")
     }
 
+    private fun timeLeft(deadlineMs: Long): Long =
+        (deadlineMs - System.currentTimeMillis()).coerceAtLeast(0)
+
+    /**
+     * Expected total length of a KWP2000 frame starting at buf[0], or null when
+     * the framing cannot be determined (yet).
+     *
+     * Format byte (ISO 14230):
+     *  - 0b10xx_xxxx: address info present, payload length in low 6 bits
+     *      total = 3 header bytes + length + 1 checksum
+     *  - 0b11xx_xxxx: address info present, payload length in the following byte
+     *      total = 4 header bytes + length + 1 checksum
+     */
+    private fun expectedKwpFrameLength(buf: ByteArray): Int? {
+        if (buf.isEmpty()) return null
+        val fmt = buf[0].toInt() and 0xFF
+        return when (fmt and 0xC0) {
+            0x80 -> 3 + (fmt and 0x3F) + 1
+            0xC0 -> if (buf.size >= 4) 4 + (buf[3].toInt() and 0xFF) + 1 else null
+            else -> null // not a KWP header (e.g. raw TCP burst) — length unknown
+        }
+    }
+
     /**
      * Reads from transport while identifying and discarding the echoed request frame.
      * K-Line adapters often echo the transmitted frame back to the host.
+     *
+     * Rewritten to fix two buffer bugs:
+     *  1. The old "partial echo" path read and DISCARDED a chunk, then read again —
+     *     when the remainder of the echo and the actual response arrived together,
+     *     the response was thrown away and the second read timed out empty.
+     *  2. After stripping the echo it returned whatever bytes were left, even when
+     *     the response frame was still arriving in later chunks (truncated frames).
+     *
+     * Now: accumulate the full echo, strip it, then keep accumulating until the
+     * KWP response frame is complete (per the format-byte length) or the line
+     * goes quiet / the deadline passes.
      */
     private suspend fun readDiscardingEcho(request: ByteArray, timeoutMs: Int): ByteArray {
-        var response = transport.read(timeoutMs)
-        
-        // If response is exactly the echo, or starts with the echo, we need to handle it.
-        // K+DCAN sometimes sends the echo in chunks.
-        val start = System.currentTimeMillis()
-        while (response.size < request.size && System.currentTimeMillis() - start < 500) {
-            val chunk = transport.read(100)
-            if (chunk.isEmpty()) break
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var raw = ByteArray(0)
+
+        // 1) Accumulate until we at least have the full echoed request frame.
+        while (timeLeft(deadline) > 0 && raw.size < request.size) {
+            val chunk = transport.read(timeLeft(deadline).coerceAtMost(FRAME_CHUNK_TIMEOUT_MS).toInt().coerceAtLeast(1))
+            if (chunk.isEmpty()) {
+                if (raw.isEmpty()) return ByteArray(0) // genuine timeout — nothing arrived at all
+                break // partial data only; stop waiting for the rest of the echo
+            }
+            raw += chunk
+        }
+
+        // 2) Strip the echo (bus echo of our request), whatever arrived of it.
+        if (raw.size >= request.size && raw.sliceArray(0 until request.size).contentEquals(request)) {
+            raw = raw.copyOfRange(request.size, raw.size)
+        } else if (raw.isNotEmpty() && raw.size < request.size &&
+            request.sliceArray(0 until raw.size).contentEquals(raw)) {
+            // Only part of the echo arrived; the response hasn't started yet.
+            // Do NOT consume-and-discard further reads here — fall through so
+            // step 3 assembles the response from scratch.
+            raw = ByteArray(0)
+        }
+
+        // 3) Accumulate the actual response until the KWP frame is complete.
+        //    For non-KWP framing (unknown length), a quiet chunk read ends the burst.
+        var response = raw
+        while (timeLeft(deadline) > 0) {
+            val expected = expectedKwpFrameLength(response)
+            if (expected != null && response.size >= expected) break // frame complete
+            if (expected == null && response.isNotEmpty() && (response[0].toInt() and 0xC0) != 0x80 && (response[0].toInt() and 0xC0) != 0xC0) {
+                break // not KWP framing and we already have data — don't over-read
+            }
+            val chunk = transport.read(timeLeft(deadline).coerceAtMost(FRAME_CHUNK_TIMEOUT_MS).toInt().coerceAtLeast(1))
+            if (chunk.isEmpty()) break // quiet line / deadline — return what we have
             response += chunk
-            if (response.size >= request.size) break
         }
-
-        // If the response starts exactly with the request, it's a bus echo
-        if (response.size >= request.size && 
-            response.sliceArray(0 until request.size).contentEquals(request)) {
-            
-            val remaining = response.copyOfRange(request.size, response.size)
-            if (remaining.isNotEmpty()) return remaining
-            
-            // If the buffer only contained the echo, read again for the actual response
-            return transport.read(timeoutMs)
-        }
-        
-        // Handle partial echo if the first read was too short
-        if (response.isNotEmpty() && response.size < request.size && 
-            request.sliceArray(0 until response.size).contentEquals(response)) {
-            
-            // Consume the rest of the echo and then read the response
-            transport.read(timeoutMs) 
-            return transport.read(timeoutMs)
-        }
-
         return response
     }
 }

@@ -12,8 +12,26 @@ import com.bmwe60coderpro.protocol.Transport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 
 private const val TAG = "UsbSerialTransport"
+
+/** Per-chunk read timeout while polling the serial port. */
+private const val USB_CHUNK_READ_TIMEOUT_MS = 50
+
+/**
+ * Once data has started arriving, the burst is considered complete after this
+ * much quiet time. K+DCAN echoes and responses are frequently split into
+ * multiple chunks by the FTDI latency timer, so returning on the first chunk
+ * truncates frames — keep accumulating until the line goes quiet.
+ */
+private const val RX_IDLE_GAP_MS = 40L
+
+/** FTDI latency-timer-sized drain window (default chip latency is 16 ms). */
+private const val FTDI_LATENCY_MS = 20
+
+/** Hard cap on how long purge() will spend draining stale bytes. */
+private const val PURGE_MAX_MS = 300L
 
 class UsbSerialTransport(
     private val application: Application,
@@ -147,28 +165,58 @@ class UsbSerialTransport(
     }
 
     override suspend fun read(timeoutMs: Int): ByteArray = withContext(Dispatchers.IO) {
-        val buffer = ByteArray(4096)
-        val start = System.currentTimeMillis()
-        
-        // K+DCAN can be bursty, try to read until we get something or timeout
-        while (System.currentTimeMillis() - start < timeoutMs) {
-            val count = try { port?.read(buffer, 50) ?: 0 } catch(e: Exception) { 0 }
-            if (count > 0) {
-                return@withContext buffer.copyOf(count)
+        // Accumulate a complete burst instead of returning the first chunk.
+        // The FTDI chip batches RX bytes by its latency timer, so a single
+        // KWP echo/response commonly arrives split across several reads.
+        val chunk = ByteArray(4096)
+        val out = ByteArrayOutputStream()
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var lastDataAt = 0L
+
+        while (System.currentTimeMillis() < deadline) {
+            val count = try {
+                port?.read(chunk, USB_CHUNK_READ_TIMEOUT_MS) ?: 0
+            } catch (e: Exception) {
+                // Previously swallowed silently — surface cable removals / I/O errors.
+                Log.e(TAG, "USB read failed, returning ${out.size()} buffered byte(s): ${e.message}")
+                break
             }
-            delay(5) // Small yield
+            if (count > 0) {
+                out.write(chunk, 0, count)
+                lastDataAt = System.currentTimeMillis()
+            } else if (lastDataAt > 0 && System.currentTimeMillis() - lastDataAt >= RX_IDLE_GAP_MS) {
+                break // burst complete — line went quiet after data arrived
+            }
         }
-        byteArrayOf()
+        out.toByteArray()
     }
 
     override suspend fun purge() = withContext(Dispatchers.IO) {
-        // Drain any stale data in the RX buffer
+        // Drain stale RX data. The old implementation used a 1 ms read timeout,
+        // but the FTDI latency timer (default 16 ms) means stale bytes are often
+        // still sitting inside the chip buffer and invisible to a 1 ms read —
+        // purge silently did nothing. Use a latency-timer-sized window and keep
+        // draining until the line is actually quiet.
         val buffer = ByteArray(1024)
-        while ((port?.read(buffer, 1) ?: 0) > 0) {
-            // Keep draining
+        var drainedTotal = 0
+        val deadline = System.currentTimeMillis() + PURGE_MAX_MS
+        while (System.currentTimeMillis() < deadline) {
+            val count = try {
+                port?.read(buffer, FTDI_LATENCY_MS) ?: 0
+            } catch (e: Exception) {
+                Log.e(TAG, "Purge read failed: ${e.message}")
+                break
+            }
+            if (count > 0) {
+                drainedTotal += count
+            } else {
+                break // quiet — nothing left in adapter or chip buffer
+            }
+        }
+        if (drainedTotal > 0) {
+            Log.d(TAG, "Purged $drainedTotal stale byte(s) from RX buffer")
         }
     }
 
     override fun isConnected(): Boolean = connected && port != null
 }
-
