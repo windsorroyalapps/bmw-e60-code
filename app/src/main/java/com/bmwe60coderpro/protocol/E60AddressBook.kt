@@ -382,13 +382,4 @@ object E60AddressBook {
         val entry = byProfile[kind].orEmpty().firstOrNull { it.name == targetName }
         return entry?.let { "0x${it.address.toString(16).uppercase()} — ${it.notes}" } ?: "Unknown target"
     }
-
-    /**
-     * Returns a copy of the [ConnectionProfile] with the recommended [AdapterPresetKind]
-     * applied based on the selected vehicle profile.
-     */
-    fun applyRecommendedPreset(profile: ConnectionProfile): ConnectionProfile {
-        val recommended = byKind(profile.vehicleProfile).recommendedPreset
-        return profile.copy(adapterPreset = recommended)
-    }
 }

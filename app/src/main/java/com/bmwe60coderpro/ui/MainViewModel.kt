@@ -126,27 +126,30 @@ class MainViewModel(private val application: Application) : ViewModel() {
 
     fun selectVehicleProfile(kind: VehicleProfileKind) {
         val vp = E60AddressBook.byKind(kind)
-        val currentProfile = _state.value.profile.copy(vehicleProfile = kind)
         val targets = E60AddressBook.targetsFor(kind)
         val currentTarget = targets.firstOrNull { it.name == _state.value.selectedTargetId } ?: targets.firstOrNull() ?: BmwTargets.DME
         val nextJobs = BmwJobs.forTarget(currentTarget)
+        
         val preset = AdapterPresets.byKind(vp.recommendedPreset)
+        val newProfile = _state.value.profile.copy(
+            vehicleProfile = kind,
+            transport = preset.transport,
+            adapterPreset = vp.recommendedPreset,
+            baudRate = preset.baudRate ?: _state.value.profile.baudRate,
+            tcpHost = preset.tcpHost ?: _state.value.profile.tcpHost,
+            tcpPort = preset.tcpPort ?: _state.value.profile.tcpPort,
+            connectTimeoutMs = preset.connectTimeoutMs,
+            readTimeoutMs = preset.readTimeoutMs,
+            settleDelayMs = preset.settleDelayMs,
+        )
+
         _state.value = _state.value.copy(
             activeVehicleProfile = vp.label,
             selectedTargetId = currentTarget.name,
             selectedJobId = nextJobs.firstOrNull()?.id ?: _state.value.selectedJobId,
             activeCommProfile = BmwCommProfiles.forTarget(currentTarget, kind).name,
             selectedTransport = preset.transport,
-            profile = currentProfile.copy(
-                transport = preset.transport,
-                adapterPreset = vp.recommendedPreset,
-                baudRate = preset.baudRate ?: currentProfile.baudRate,
-                tcpHost = preset.tcpHost ?: currentProfile.tcpHost,
-                tcpPort = preset.tcpPort ?: currentProfile.tcpPort,
-                connectTimeoutMs = preset.connectTimeoutMs,
-                readTimeoutMs = preset.readTimeoutMs,
-                settleDelayMs = preset.settleDelayMs,
-            ),
+            profile = newProfile,
             tuningSummary = ExpertFunctions.tuneSummary(_state.value.selectedMapSlot, kind),
         )
         prefs.saveProfile(_state.value.profile)
@@ -157,18 +160,19 @@ class MainViewModel(private val application: Application) : ViewModel() {
 
     fun applyAdapterPreset(kind: AdapterPresetKind) {
         val preset = AdapterPresets.byKind(kind)
+        val newProfile = _state.value.profile.copy(
+            transport = preset.transport,
+            baudRate = preset.baudRate ?: _state.value.profile.baudRate,
+            tcpHost = preset.tcpHost ?: _state.value.profile.tcpHost,
+            tcpPort = preset.tcpPort ?: _state.value.profile.tcpPort,
+            connectTimeoutMs = preset.connectTimeoutMs,
+            readTimeoutMs = preset.readTimeoutMs,
+            settleDelayMs = preset.settleDelayMs,
+            adapterPreset = preset.kind,
+        )
         _state.value = _state.value.copy(
             selectedTransport = preset.transport,
-            profile = _state.value.profile.copy(
-                transport = preset.transport,
-                baudRate = preset.baudRate ?: _state.value.profile.baudRate,
-                tcpHost = preset.tcpHost ?: _state.value.profile.tcpHost,
-                tcpPort = preset.tcpPort ?: _state.value.profile.tcpPort,
-                connectTimeoutMs = preset.connectTimeoutMs,
-                readTimeoutMs = preset.readTimeoutMs,
-                settleDelayMs = preset.settleDelayMs,
-                adapterPreset = preset.kind,
-            )
+            profile = newProfile
         )
         prefs.saveProfile(_state.value.profile)
         log("INFO", "Preset applied: ${preset.label}")
