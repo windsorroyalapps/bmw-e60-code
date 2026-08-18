@@ -80,7 +80,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import android.graphics.Paint
+import android.graphics.RectF
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.CardDefaults
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 
@@ -953,19 +960,26 @@ private fun GaugesScreen(state: AppState, vm: MainViewModel) {
         val egs = state.moduleSnapshots["EGS"]?.decoded ?: emptyMap()
         val dsc = state.moduleSnapshots["DSC"]?.decoded ?: emptyMap()
 
+        val rpm = dme["engine_speed_rpm"]?.toDoubleOrNull() ?: 0.0
+        val speed = dsc["vehicle_speed_kph"]?.toDoubleOrNull() ?: 0.0
+        val coolant = dme["coolant_temp_c"]?.toDoubleOrNull() ?: 0.0
+        val oilTemp = egs["oil_temp_c"]?.toDoubleOrNull() ?: 0.0
+        val gear = egs["current_gear_raw"] ?: "P"
+        val voltage = dme["battery_v"]?.toDoubleOrNull() ?: 0.0
+
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            GaugeBox(label = "RPM", value = dme["engine_speed_rpm"] ?: "0", unit = "min⁻¹", modifier = Modifier.weight(1f))
-            GaugeBox(label = "Speed", value = dsc["vehicle_speed_kph"] ?: "0", unit = "km/h", modifier = Modifier.weight(1f))
+            CircularGaugeBox(label = "RPM", value = rpm.toInt().toString(), min = 0f, max = 8000f, current = rpm.toFloat(), unit = "min⁻¹", modifier = Modifier.weight(1f))
+            CircularGaugeBox(label = "Speed", value = speed.toInt().toString(), min = 0f, max = 280f, current = speed.toFloat(), unit = "km/h", modifier = Modifier.weight(1f))
         }
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            GaugeBox(label = "Coolant", value = dme["coolant_temp_c"] ?: "0", unit = "°C", modifier = Modifier.weight(1f))
-            GaugeBox(label = "Oil Temp", value = egs["oil_temp_c"] ?: "0", unit = "°C", modifier = Modifier.weight(1f))
+            CircularGaugeBox(label = "Coolant", value = coolant.toInt().toString(), min = 0f, max = 130f, current = coolant.toFloat(), unit = "°C", modifier = Modifier.weight(1f))
+            CircularGaugeBox(label = "Oil Temp", value = oilTemp.toInt().toString(), min = 0f, max = 150f, current = oilTemp.toFloat(), unit = "°C", modifier = Modifier.weight(1f))
         }
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            GaugeBox(label = "Gear", value = egs["current_gear_raw"] ?: "P", unit = "", modifier = Modifier.weight(1f))
-            GaugeBox(label = "Voltage", value = dme["battery_v"] ?: "0.0", unit = "V", modifier = Modifier.weight(1f))
+            GaugeBox(label = "Gear", value = gear, unit = "", modifier = Modifier.weight(1f))
+            CircularGaugeBox(label = "Voltage", value = "%.1f".format(voltage), min = 9f, max = 16f, current = voltage.toFloat(), unit = "V", modifier = Modifier.weight(1f))
         }
 
         Card(
@@ -985,6 +999,71 @@ private fun GaugesScreen(state: AppState, vm: MainViewModel) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Intake Temp", color = bmwOrange.copy(alpha = 0.8f))
                     Text("${dme["intake_temp_c"] ?: "0"} °C", color = bmwOrange, fontFamily = FontFamily.Monospace)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CircularGaugeBox(
+    label: String,
+    value: String,
+    min: Float,
+    max: Float,
+    current: Float,
+    unit: String,
+    modifier: Modifier = Modifier
+) {
+    val bmwOrange = Color(0xFFFF8800)
+    val darkBackground = Color(0xFF1A1A1A)
+    val animatedValue by animateFloatAsState(
+        targetValue = current,
+        animationSpec = tween(durationMillis = 300),
+        label = "gaugeValue"
+    )
+
+    Card(
+        modifier = modifier.aspectRatio(1f),
+        colors = CardDefaults.cardColors(containerColor = darkBackground),
+        border = BorderStroke(1.dp, bmwOrange.copy(alpha = 0.2f))
+    ) {
+        Box(modifier = Modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.Center) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val sweepAngle = 240f
+                val startAngle = 150f
+                val progress = ((animatedValue - min) / (max - min)).coerceIn(0f, 1f)
+
+                // Background track
+                drawArc(
+                    color = bmwOrange.copy(alpha = 0.1f),
+                    startAngle = startAngle,
+                    sweepAngle = sweepAngle,
+                    useCenter = false,
+                    style = Stroke(width = 8.dp.toPx())
+                )
+
+                // Progress track
+                drawArc(
+                    color = bmwOrange,
+                    startAngle = startAngle,
+                    sweepAngle = sweepAngle * progress,
+                    useCenter = false,
+                    style = Stroke(width = 8.dp.toPx())
+                )
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(label.uppercase(), color = bmwOrange.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    value,
+                    color = bmwOrange,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = FontFamily.Monospace
+                )
+                if (unit.isNotEmpty()) {
+                    Text(unit, color = bmwOrange.copy(alpha = 0.7f), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

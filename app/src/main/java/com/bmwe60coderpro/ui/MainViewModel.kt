@@ -1935,7 +1935,10 @@ class MainViewModel(private val application: Application) : ViewModel() {
 
     private fun dashboardPollPlan(): List<Pair<String, String>> = listOf(
         BmwTargets.DME.name to "dme_live_basic",
+        BmwTargets.DME.name to "dme_live_air",
         BmwTargets.EGS.name to "egs_live_basic",
+        BmwTargets.EGS.name to "egs_live_temp",
+        BmwTargets.DSC.name to "dsc_live_status",
         BmwTargets.DSC.name to "dsc_live_wheels",
         BmwTargets.CAS.name to "cas_live_terminals",
     ).filter { (targetId, jobId) ->
