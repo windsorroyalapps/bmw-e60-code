@@ -15,6 +15,14 @@ enum class VehicleProfileKind {
     E87_GENERIC,
     E92_N54,
     F30_GENERIC,
+    E53_GENERIC,
+    E65_GENERIC,
+    E89_GENERIC,
+    G30_GENERIC,
+    E83_GENERIC,
+    E85_GENERIC,
+    E38_GENERIC,
+    F20_GENERIC,
 }
 
 enum class ServiceScreen {

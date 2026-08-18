@@ -2,6 +2,7 @@ package com.bmwe60coderpro.usb
 
 import android.app.Application
 import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
 import android.util.Log
 import com.hoho.android.usbserial.driver.UsbSerialPort
@@ -91,20 +92,29 @@ class UsbSerialTransport(
                 try {
                     port?.open(connection)
                     // Standard K+DCAN speed is 500k for D-CAN or 9600/10400 for K-Line
-                    // But the FTDI chip itself usually talks at 115200 or 230400 to the host
+                    // But the FTDI chip itself usually talks at 115200 to the host.
+                    // If your cable uses a higher speed (e.g. 230400), you might need to adjust this.
                     port?.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
                     
                     // Critical for K+DCAN stability: 
-                    // Set Latency Timer to 1ms (if supported) via vendor request or assume it's set
-                    // We also need to ensure buffers are clear
+                    // Set Latency Timer to 1ms for FTDI chips. This prevents the chip from
+                    // buffering small KWP2000 packets for 16ms, which causes timeouts.
+                    if (device.vendorId == 0x0403) {
+                        Log.d(TAG, "FTDI device detected, setting latency timer to 1ms")
+                        val result = connection.controlTransfer(0x40, 0x09, 1, 0, null, 0, 1000)
+                        if (result < 0) {
+                            Log.w(TAG, "Failed to set FTDI latency timer: $result")
+                        }
+                    }
+
                     port?.dtr = true
                     port?.rts = true
                     
                     connected = true
                     Log.i(TAG, "SUCCESS: Connected to ${device.deviceName}")
                     
-                    // Extra settle time after opening port
-                    delay(100)
+                    // Extra settle time after opening port and setting latency
+                    delay(200)
                     return@withContext
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to configure ${device.deviceName}: ${e.message}")

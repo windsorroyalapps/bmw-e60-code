@@ -45,7 +45,16 @@ object BmwTargets {
     val ACSM = EcuTarget("ACSM", 0x57)
     val CCC = EcuTarget("CCC", 0x68)
 
-    val defaults = listOf(DME, EGS, DSC, KOMBI, SZL, CAS, FRM, ACSM, CCC)
+    // F/G series Specific Targets
+    val ZGM = EcuTarget("ZGM", 0x10)
+    val FEM = EcuTarget("FEM / BDC", 0x40)
+
+    // E46 / E39 / E53 specific targets
+    val EWS = EcuTarget("EWS", 0x44)
+    val LSZ = EcuTarget("LSZ / LCM", 0xD0)
+    val GM = EcuTarget("GM / ZKE", 0x00) // General Module
+
+    val defaults = listOf(DME, EGS, DSC, KOMBI, SZL, CAS, FRM, ACSM, CCC, EWS, LSZ, GM, ZGM, FEM)
 }
 
 private fun step(serviceId: Int, vararg payload: Int, label: String) =
@@ -116,6 +125,21 @@ object BmwJobs {
             readOnly = false,
         ),
         BmwJob(
+            id = "faults_read_uds",
+            label = "Read DTCs (UDS 0x19)",
+            category = JobCategory.FAULTS,
+            steps = listOf(step(0x19, 0x02, 0x08, label = "Read DTCs by status mask")),
+            description = "UDS Service 0x19: Read diagnostic trouble codes (F/G series).",
+        ),
+        BmwJob(
+            id = "faults_clear_uds",
+            label = "Clear DTCs (UDS 0x14)",
+            category = JobCategory.FAULTS,
+            steps = listOf(step(0x14, 0xFF, 0xFF, 0xFF, label = "Clear DTCs")),
+            description = "Clear DTCs via UDS Service 0x14 (F/G series).",
+            readOnly = false,
+        ),
+        BmwJob(
             id = "read_vin_chunk",
             label = "Read VIN / ASCII block",
             category = JobCategory.IDENTIFICATION,
@@ -178,7 +202,7 @@ object BmwJobs {
             ),
             description = "EWS-based ignition bypass for E46 and E39 (no CAS module).",
             readOnly = false,
-            supportedTargets = setOf(BmwTargets.DME.name),
+            supportedTargets = setOf(BmwTargets.DME.name, BmwTargets.EWS.name),
         ),
     )
 
@@ -297,7 +321,32 @@ object BmwJobs {
             category = JobCategory.IDENTIFICATION,
             steps = standardSessionPack() + listOf(step(0x21, 0x22, label = "Read EWS key 3 data")),
             description = "Read full key data for EWS slot 3.",
-            supportedTargets = setOf(BmwTargets.DME.name),
+            supportedTargets = setOf(BmwTargets.DME.name, BmwTargets.EWS.name),
+        ),
+        // F-series FEM/BDC specific UDS style jobs
+        BmwJob(
+            id = "fem_read_vin_uds",
+            label = "Read VIN (UDS 0x22 F190)",
+            category = JobCategory.IDENTIFICATION,
+            steps = listOf(step(0x22, 0xF1, 0x90, label = "UDS Read VIN")),
+            description = "Read VIN via UDS Service 0x22 DID 0xF190 (Common on F/G series).",
+            supportedTargets = setOf(BmwTargets.FEM.name, BmwTargets.ZGM.name),
+        ),
+        BmwJob(
+            id = "fem_read_terminals_uds",
+            label = "Read Terminal Status (UDS)",
+            category = JobCategory.LIVE_DATA,
+            steps = listOf(step(0x22, 0x40, 0x01, label = "UDS Read Terminals")),
+            description = "Read KL30, KL15, KL50 status via UDS.",
+            supportedTargets = setOf(BmwTargets.FEM.name),
+        ),
+        BmwJob(
+            id = "zgm_read_identity",
+            label = "Read ZGM Information",
+            category = JobCategory.IDENTIFICATION,
+            steps = standardSessionPack() + listOf(step(0x1A, 0x90, label = "ZGM Identity")),
+            description = "Read Central Gateway Module (ZGM) identity and variant.",
+            supportedTargets = setOf(BmwTargets.ZGM.name),
         ),
         BmwJob(
             id = "fem_read_key_slot_1",
@@ -892,6 +941,18 @@ object BmwJobs {
             description = "Write a map chunk to DME memory. Requires security access.",
             readOnly = false,
             supportedTargets = setOf(BmwTargets.DME.name),
+        ),
+        BmwJob(
+            id = "f_series_gateway_diag",
+            label = "F-Series Gateway Probe",
+            category = JobCategory.MODULE_PACK,
+            steps = listOf(
+                step(0x10, 0x01, label = "Default session"),
+                step(0x22, 0xF1, 0x90, label = "Read VIN"),
+                step(0x22, 0xF1, 0x87, label = "Read HW Edition"),
+            ),
+            description = "Basic connectivity probe for F-series ZGM/FEM gateway.",
+            supportedTargets = setOf(BmwTargets.ZGM.name, BmwTargets.FEM.name),
         ),
     )
 
