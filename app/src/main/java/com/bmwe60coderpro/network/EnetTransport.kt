@@ -6,7 +6,12 @@ import com.bmwe60coderpro.util.HexUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.net.Socket
+import java.net.SocketTimeoutException
+
+/** Per-read poll interval; also the quiet gap that ends a received burst. */
+private const val ENET_POLL_TIMEOUT_MS = 250
 
 /**
  * BMW ENET WiFi transport.
@@ -63,15 +68,46 @@ class EnetTransport(
 
     override suspend fun read(timeoutMs: Int): ByteArray = withContext(Dispatchers.IO) {
         val inp = socket?.getInputStream() ?: error("ENET not connected")
+        // The old implementation ignored timeoutMs entirely (constructor
+        // soTimeout won every call) and returned the first TCP segment,
+        // truncating BMW-FAST frames split across segments. Honor the caller's
+        // deadline and accumulate until the stream goes quiet.
+        socket?.soTimeout = ENET_POLL_TIMEOUT_MS
         val buffer = ByteArray(8192)
-        val count = inp.read(buffer)
-        if (count > 0) buffer.copyOf(count) else ByteArray(0)
+        val out = ByteArrayOutputStream()
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var sawData = false
+
+        while (System.currentTimeMillis() < deadline) {
+            val count = try {
+                inp.read(buffer)
+            } catch (e: SocketTimeoutException) {
+                if (sawData) break else continue
+            }
+            when {
+                count > 0 -> {
+                    out.write(buffer, 0, count)
+                    sawData = true
+                }
+                count < 0 -> {
+                    // EOF — peer closed the connection.
+                    runCatching { socket?.close() }
+                    connected = false
+                    break
+                }
+            }
+        }
+        out.toByteArray()
     }
 
     override suspend fun purge() = withContext(Dispatchers.IO) {
         val inp = socket?.getInputStream() ?: return@withContext
-        if (inp.available() > 0) {
-            inp.skip(inp.available().toLong())
+        // skip() is not guaranteed to skip all requested bytes — loop until drained.
+        while (inp.available() > 0) {
+            val skipped = inp.skip(inp.available().toLong())
+            if (skipped <= 0L) {
+                if (inp.read() < 0) break // EOF
+            }
         }
     }
 
@@ -106,7 +142,7 @@ class EnetTransport(
         
         val length = ((data[0].toInt() and 0xFF) shl 8) or (data[1].toInt() and 0xFF)
         // Sanity: reject absurd lengths (BMW diagnostic payloads are typically < 4 KB)
-        if (length < 0 || length > 4096) return null
+        if (length > 4096) return null
 
         val target = data[2].toInt() and 0xFF
         // val source = data[3].toInt() and 0xFF // Source available if needed
