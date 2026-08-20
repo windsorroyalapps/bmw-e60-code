@@ -34,6 +34,7 @@ import com.bmwe60coderpro.protocol.JobCategory
 import com.bmwe60coderpro.protocol.JobStep
 import com.bmwe60coderpro.protocol.BmwTargets
 import com.bmwe60coderpro.protocol.DatenManager
+import com.bmwe60coderpro.protocol.DiagnosticSnapshotReducer
 import com.bmwe60coderpro.protocol.E60AddressBook
 import com.bmwe60coderpro.protocol.EcuTarget
 import com.bmwe60coderpro.protocol.ExpertFunctions
@@ -82,6 +83,8 @@ class MainViewModel(private val application: Application) : ViewModel() {
     private var transport: Transport? = null
     private var session: KdcanSession? = null
     private var pollingJob: Job? = null
+    /** Last logged failure per target/job, used to keep repeated polling errors readable. */
+    private val lastPollFailureByJob = mutableMapOf<String, String>()
     private var connectJob: Job? = null
     // Separate session used for SIM remote start — does not share the main K+DCAN session
     private var simSession: KdcanSession? = null
@@ -868,21 +871,43 @@ class MainViewModel(private val application: Application) : ViewModel() {
             _state.value = _state.value.copy(pollingEnabled = true, dashboardStatus = "Polling every ${_state.value.pollingIntervalMs} ms")
             log("INFO", "Dashboard polling started")
             while (_state.value.connected && _state.value.pollingEnabled) {
+                var completedReads = 0
+                var successfulReads = 0
                 val pollJobs = dashboardPollPlan()
                 pollJobs.forEach { (targetId, jobId) ->
                     if (!_state.value.connected || !_state.value.pollingEnabled) return@forEach
                     val target = targets().firstOrNull { it.name == targetId } ?: return@forEach
                     val job = BmwJobs.byId(jobId)?.takeIf { it.appliesTo(target) } ?: return@forEach
-                    runCatching {
+                    try {
                         activeSession.setVehicleProfile(_state.value.profile.vehicleProfile)
                         val result = activeSession.executeOnTarget(target, job)
+                        completedReads += 1
+                        if (result.success) {
+                            successfulReads += 1
+                            lastPollFailureByJob.remove("${target.name}:${job.id}")
+                        } else {
+                            val failureKey = "${target.name}:${job.id}"
+                            if (lastPollFailureByJob[failureKey] != result.summary) {
+                                lastPollFailureByJob[failureKey] = result.summary
+                                log("POLL", "$failureKey failed: ${result.summary}")
+                            }
+                        }
                         applyJobResult(result, updateSelection = false, logDetail = false, snapshotTitleSuffix = " [poll]")
-                    }.onFailure { t ->
-                        log("POLL", "${target.name} ${job.label}: ${t.message ?: t.javaClass.simpleName}")
+                    } catch (t: Throwable) {
+                        if (t is CancellationException) throw t
+                        completedReads += 1
+                        val failureKey = "${target.name}:${job.id}"
+                        val reason = t.message ?: t.javaClass.simpleName
+                        if (lastPollFailureByJob[failureKey] != reason) {
+                            lastPollFailureByJob[failureKey] = reason
+                            log("POLL", "$failureKey failed: $reason")
+                        }
                     }
                     delay(100)
                 }
-                _state.value = _state.value.copy(dashboardStatus = "Last refresh ${timestamp()} • interval ${_state.value.pollingIntervalMs} ms")
+                _state.value = _state.value.copy(
+                    dashboardStatus = "Last refresh ${timestamp()} • $successfulReads/$completedReads reads OK • interval ${_state.value.pollingIntervalMs} ms"
+                )
                 delay(_state.value.pollingIntervalMs)
             }
         }
@@ -1290,12 +1315,15 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 val activeSession = session ?: error("Not connected")
                 val target = targets().firstOrNull { it.name.equals(module, ignoreCase = true) }
                     ?: error("Unknown module $module")
-                activeSession.setTarget(target)
-                // Start default session, then read coding record 0x9B
+                // Use the cable exclusively for the on-demand read and retain the target
+                // throughout session start and record retrieval.
+                stopPollingInternal(false)
+                activeSession.setVehicleProfile(_state.value.profile.vehicleProfile)
                 val sessionJob = BmwJobs.byId("start_session_default") ?: error("Job not found: start_session_default")
-                activeSession.execute(sessionJob)
+                val sessionResult = activeSession.executeOnTarget(target, sessionJob)
+                if (!sessionResult.success) error("Cannot start diagnostic session for $module: ${sessionResult.summary}")
                 val readJob = BmwJobs.byId("read_coding_9B") ?: error("Job not found: read_coding_9B")
-                val result = activeSession.execute(readJob)
+                val result = activeSession.executeOnTarget(target, readJob)
                 if (result.success) {
                     val ascii = result.decoded.values.firstOrNull { it.length > 3 } ?: ""
                     val populated = if (ascii.isNotBlank())
@@ -1391,10 +1419,11 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 val activeSession = session ?: error("Not connected")
                 val target = targets().firstOrNull { it.name.contains(module, ignoreCase = true) }
                     ?: error("Unknown module $module")
-                activeSession.setTarget(target)
+                stopPollingInternal(false)
+                activeSession.setVehicleProfile(_state.value.profile.vehicleProfile)
 
                 val readJob = BmwJobs.byId("read_vo_fa") ?: error("Job not found: read_vo_fa")
-                val result = activeSession.execute(readJob)
+                val result = activeSession.executeOnTarget(target, readJob)
 
                 if (result.success) {
                     val rawVo = result.decoded.values.firstOrNull { it.length > 5 } ?: ""
@@ -1898,6 +1927,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
     private suspend fun stopPollingInternal(logStop: Boolean) {
         pollingJob?.cancel()
         pollingJob = null
+        lastPollFailureByJob.clear()
         _state.value = _state.value.copy(
             pollingEnabled = false,
             dashboardStatus = if (_state.value.connected) "Connected, polling stopped" else "Disconnected"
@@ -1929,12 +1959,10 @@ class MainViewModel(private val application: Application) : ViewModel() {
         snapshotTitleSuffix: String = "",
     ) {
         val snapshots = _state.value.moduleSnapshots.toMutableMap()
-        snapshots[result.target.name] = ModuleSnapshot(
-            targetId = result.target.name,
-            title = result.job.label + snapshotTitleSuffix,
-            summary = result.summary,
-            decoded = result.decoded,
-            rawResponse = result.responseHex,
+        snapshots[result.target.name] = DiagnosticSnapshotReducer.apply(
+            previous = snapshots[result.target.name],
+            result = result,
+            snapshotTitleSuffix = snapshotTitleSuffix,
             timestamp = timestamp(),
         )
         _state.value = _state.value.copy(
@@ -1945,7 +1973,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
             vehicleInfo = "${result.target.name}: ${result.summary}",
             decodedFields = result.decoded,
             moduleSnapshots = snapshots,
-            activeCommProfile = session?.getCommProfile()?.name ?: _state.value.activeCommProfile,
+            activeCommProfile = result.decoded["comm_profile"] ?: _state.value.activeCommProfile,
         )
         if (logDetail) {
             log("JOB", "${result.target.name} -> ${result.job.label}")
@@ -1961,6 +1989,9 @@ class MainViewModel(private val application: Application) : ViewModel() {
         BmwTargets.EGS.name to "egs_live_temp",
         BmwTargets.DSC.name to "dsc_live_status",
         BmwTargets.DSC.name to "dsc_live_wheels",
+        // Cluster drive data is a useful read-only fallback for RPM/speed when an
+        // ECU-specific DME or DSC local identifier is unavailable on this car.
+        BmwTargets.KOMBI.name to "kombi_live_drive",
         BmwTargets.CAS.name to "cas_live_terminals",
     ).filter { (targetId, jobId) ->
         targets().any { it.name == targetId } && BmwJobs.byId(jobId) != null

@@ -959,27 +959,52 @@ private fun GaugesScreen(state: AppState, vm: MainViewModel) {
         val dme = state.moduleSnapshots["DME / DDE"]?.decoded ?: emptyMap()
         val egs = state.moduleSnapshots["EGS"]?.decoded ?: emptyMap()
         val dsc = state.moduleSnapshots["DSC"]?.decoded ?: emptyMap()
+        val kombi = state.moduleSnapshots["KOMBI"]?.decoded ?: emptyMap()
 
-        val rpm = dme["engine_speed_rpm"]?.toDoubleOrNull() ?: 0.0
-        val speed = dsc["vehicle_speed_kph"]?.toDoubleOrNull() ?: 0.0
-        val coolant = dme["coolant_temp_c"]?.toDoubleOrNull() ?: 0.0
-        val oilTemp = egs["oil_temp_c"]?.toDoubleOrNull() ?: 0.0
-        val gear = egs["current_gear_raw"] ?: "P"
-        val voltage = dme["battery_v"]?.toDoubleOrNull() ?: 0.0
+        val rpm = dme["engine_speed_rpm"]?.toDoubleOrNull()
+            ?: kombi["engine_speed_rpm"]?.toDoubleOrNull()
+        val speed = dsc["vehicle_speed_kph"]?.toDoubleOrNull()
+            ?: kombi["vehicle_speed_kph"]?.toDoubleOrNull()
+        val coolant = dme["coolant_temp_c"]?.toDoubleOrNull()
+        val oilTemp = egs["oil_temp_c"]?.toDoubleOrNull()
+        val gear = egs["current_gear_raw"] ?: "—"
+        val voltage = dme["battery_v"]?.toDoubleOrNull()
+        val pollingErrors = listOf(
+            "DME / DDE" to dme,
+            "EGS" to egs,
+            "DSC" to dsc,
+            "KOMBI" to kombi,
+        ).mapNotNull { (module, fields) ->
+            fields["diagnostic_last_error"]?.let { "$module: $it" }
+        }
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            CircularGaugeBox(label = "RPM", value = rpm.toInt().toString(), min = 0f, max = 8000f, current = rpm.toFloat(), unit = "min⁻¹", modifier = Modifier.weight(1f))
-            CircularGaugeBox(label = "Speed", value = speed.toInt().toString(), min = 0f, max = 280f, current = speed.toFloat(), unit = "km/h", modifier = Modifier.weight(1f))
+        if (pollingErrors.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF3A2424)),
+            ) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("Latest diagnostic issue", color = Color(0xFFFFB4AB), style = MaterialTheme.typography.labelLarge)
+                    pollingErrors.take(2).forEach { issue ->
+                        Text(issue, color = Color(0xFFFFDAD6), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
         }
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            CircularGaugeBox(label = "Coolant", value = coolant.toInt().toString(), min = 0f, max = 130f, current = coolant.toFloat(), unit = "°C", modifier = Modifier.weight(1f))
-            CircularGaugeBox(label = "Oil Temp", value = oilTemp.toInt().toString(), min = 0f, max = 150f, current = oilTemp.toFloat(), unit = "°C", modifier = Modifier.weight(1f))
+            CircularGaugeBox(label = "RPM", value = rpm?.toInt()?.toString() ?: "—", min = 0f, max = 8000f, current = (rpm ?: 0.0).toFloat(), unit = "min⁻¹", modifier = Modifier.weight(1f))
+            CircularGaugeBox(label = "Speed", value = speed?.toInt()?.toString() ?: "—", min = 0f, max = 280f, current = (speed ?: 0.0).toFloat(), unit = "km/h", modifier = Modifier.weight(1f))
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            CircularGaugeBox(label = "Coolant", value = coolant?.toInt()?.toString() ?: "—", min = 0f, max = 130f, current = (coolant ?: 0.0).toFloat(), unit = "°C", modifier = Modifier.weight(1f))
+            CircularGaugeBox(label = "Oil Temp", value = oilTemp?.toInt()?.toString() ?: "—", min = 0f, max = 150f, current = (oilTemp ?: 0.0).toFloat(), unit = "°C", modifier = Modifier.weight(1f))
         }
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             GaugeBox(label = "Gear", value = gear, unit = "", modifier = Modifier.weight(1f))
-            CircularGaugeBox(label = "Voltage", value = "%.1f".format(voltage), min = 9f, max = 16f, current = voltage.toFloat(), unit = "V", modifier = Modifier.weight(1f))
+            CircularGaugeBox(label = "Voltage", value = voltage?.let { "%.1f".format(it) } ?: "—", min = 9f, max = 16f, current = (voltage ?: 0.0).toFloat(), unit = "V", modifier = Modifier.weight(1f))
         }
 
         Card(
@@ -990,15 +1015,15 @@ private fun GaugesScreen(state: AppState, vm: MainViewModel) {
                 Text("Additional Data", color = bmwOrange, style = MaterialTheme.typography.labelLarge)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Throttle", color = bmwOrange.copy(alpha = 0.8f))
-                    Text("${dme["throttle_angle_pct"] ?: "0"} %", color = bmwOrange, fontFamily = FontFamily.Monospace)
+                    Text(dme["throttle_angle_pct"]?.let { "$it %" } ?: "—", color = bmwOrange, fontFamily = FontFamily.Monospace)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Pedal", color = bmwOrange.copy(alpha = 0.8f))
-                    Text("${dme["pedal_pct"] ?: "0"} %", color = bmwOrange, fontFamily = FontFamily.Monospace)
+                    Text(dme["pedal_pct"]?.let { "$it %" } ?: "—", color = bmwOrange, fontFamily = FontFamily.Monospace)
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Intake Temp", color = bmwOrange.copy(alpha = 0.8f))
-                    Text("${dme["intake_temp_c"] ?: "0"} °C", color = bmwOrange, fontFamily = FontFamily.Monospace)
+                    Text(dme["intake_temp_c"]?.let { "$it °C" } ?: "—", color = bmwOrange, fontFamily = FontFamily.Monospace)
                 }
             }
         }
