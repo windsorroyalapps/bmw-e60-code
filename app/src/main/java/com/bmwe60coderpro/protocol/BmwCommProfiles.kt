@@ -31,7 +31,9 @@ object BmwCommProfiles {
         BmwTargets.DSC.name to CommProfile("E60 DSC",1800,2,65,400,35,true,true),
         BmwTargets.KOMBI.name to CommProfile("E60 KOMBI",1300,1,35,250,20,false,false),
         BmwTargets.SZL.name to CommProfile("E60 SZL",1400,1,45,300,25,true,false),
-        BmwTargets.CAS.name to CommProfile("E60 CAS",1500,2,55,450,35,true,false),
+        // CAS read-only diagnostics use an explicit default-session request. Do not add
+        // tester-present automatically: some CAS variants reject 0x3E with NRC 0x22.
+        BmwTargets.CAS.name to CommProfile("E60 CAS",1500,2,55,450,35,false,false),
         BmwTargets.FRM.name to CommProfile("E60 FRM / LM",1400,1,40,300,25,false,false),
         // ACSM: needs extended session for coding writes; conservative timeouts
         BmwTargets.ACSM.name to CommProfile("E60 ACSM",1600,2,55,400,35,true,true),

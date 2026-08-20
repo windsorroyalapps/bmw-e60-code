@@ -57,6 +57,19 @@ class KdcanSessionTest {
     }
 
     @Test
+    fun `CAS terminal polling uses CAS address and bypasses tester present`() = runBlocking {
+        val transport = AddressAwareTransport()
+        val session = KdcanSession(transport, BmwTargets.DME)
+        val result = session.executeOnTarget(BmwTargets.CAS, BmwJobs.byId("cas_live_terminals")!!)
+
+        assertTrue(result.success)
+        assertTrue(result.target == BmwTargets.CAS)
+        assertTrue(transport.requestedTargets.all { it == 0x40 })
+        assertTrue(transport.requestedServices.containsAll(listOf(0x10, 0x21)))
+        assertFalse(transport.requestedServices.contains(0x3E))
+    }
+
+    @Test
     fun `concurrent diagnostic requests keep their selected ECU target`() = runBlocking {
         val transport = AddressAwareTransport()
         val session = KdcanSession(transport, BmwTargets.DME)
