@@ -1,6 +1,7 @@
 package com.bmwe60coderpro.protocol
 
 import com.bmwe60coderpro.data.DeviceInfo
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -44,6 +45,20 @@ class KdcanSessionTest {
         assertTrue(result.responseHex.contains("82 F1 12 50 81"))
     }
 
+    @Test
+    fun `concurrent diagnostic requests keep their selected ECU target`() = runBlocking {
+        val transport = AddressAwareTransport()
+        val session = KdcanSession(transport, BmwTargets.DME)
+        val dmeJob = BmwJobs.byId("start_session_default")!!
+
+        val dme = async { session.executeOnTarget(BmwTargets.DME, dmeJob) }
+        val cas = async { session.executeOnTarget(BmwTargets.CAS, dmeJob) }
+
+        assertTrue(dme.await().target == BmwTargets.DME)
+        assertTrue(cas.await().target == BmwTargets.CAS)
+        assertTrue(transport.requestedTargets.containsAll(listOf(0x12, 0x40)))
+    }
+
     private class SplitEchoTransport : Transport {
         private val reads = ArrayDeque<ByteArray>()
 
@@ -62,6 +77,32 @@ class KdcanSessionTest {
             )
             reads.addLast(bytes.copyOfRange(0, 2))
             reads.addLast(bytes.copyOfRange(2, bytes.size) + response)
+        }
+
+        override suspend fun read(timeoutMs: Int): ByteArray =
+            if (reads.isEmpty()) ByteArray(0) else reads.removeFirst()
+    }
+
+    private class AddressAwareTransport : Transport {
+        private val reads = ArrayDeque<ByteArray>()
+        val requestedTargets = mutableListOf<Int>()
+
+        override suspend fun listDevices(): List<DeviceInfo> = emptyList()
+        override suspend fun connect(targetId: String?) = Unit
+        override suspend fun disconnect() = Unit
+        override suspend fun purge() = Unit
+        override fun isConnected(): Boolean = true
+
+        override suspend fun write(bytes: ByteArray) {
+            val request = assertNotNull(KwpFrameCodec.parse(bytes))
+            requestedTargets += request.targetAddress
+            val response = KwpFrameCodec.buildFrame(
+                targetAddress = 0xF1,
+                sourceAddress = request.targetAddress,
+                serviceId = request.payload.first() + 0x40,
+                payload = request.payload.drop(1),
+            )
+            reads.addLast(bytes + response)
         }
 
         override suspend fun read(timeoutMs: Int): ByteArray =

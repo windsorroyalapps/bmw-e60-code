@@ -8,6 +8,7 @@ import kotlinx.coroutines.sync.withLock
 
 /** How long a single follow-up chunk read may block while assembling a frame. */
 private const val FRAME_CHUNK_TIMEOUT_MS = 300L
+private const val LIVE_SESSION_REUSE_WINDOW_MS = 5_000L
 
 class KdcanSession(
     private val transport: Transport,
@@ -16,6 +17,9 @@ class KdcanSession(
     private val testerAddress: Int = 0xF1,
 ) {
     private val mutex = Mutex()
+    /** Last successful diagnostic-session start per ECU address; guarded by [mutex]. */
+    private val activeSessionSinceMs = mutableMapOf<Int, Long>()
+
     fun getTransport(): Transport = transport
     private var commProfile: CommProfile = BmwCommProfiles.forTarget(target, vehicleProfile)
     fun setTarget(target: EcuTarget) {
@@ -24,6 +28,7 @@ class KdcanSession(
     }
 
     fun setVehicleProfile(vehicleProfile: VehicleProfileKind) {
+        if (this.vehicleProfile != vehicleProfile) activeSessionSinceMs.clear()
         this.vehicleProfile = vehicleProfile
         this.commProfile = BmwCommProfiles.forTarget(target, vehicleProfile)
     }
@@ -37,10 +42,12 @@ class KdcanSession(
     fun getTarget(): EcuTarget = target
 
     suspend fun sendRawHex(hex: String): String = mutex.withLock {
+        val activeTarget = target
+        val activeProfile = commProfile
         val bytes = HexUtils.hexToBytes(hex)
         transport.write(bytes)
-        delay(commProfile.interFrameDelayMs)
-        val response = readDiscardingEcho(bytes, commProfile.requestTimeoutMs)
+        delay(activeProfile.interFrameDelayMs)
+        val response = readDiscardingEcho(bytes, activeProfile.requestTimeoutMs, activeTarget.targetAddress)
         return HexUtils.bytesToHex(response)
     }
 
@@ -49,16 +56,11 @@ class KdcanSession(
      * Used for real-time controller injection where we must not switch the session target.
      */
     suspend fun sendRawFrame(targetAddress: Int, serviceId: Int, payload: List<Int>): String = mutex.withLock {
-        val data = mutableListOf(serviceId and 0xFF)
-        data.addAll(payload.map { it and 0xFF })
-        val format = 0x80 or (data.size and 0x3F)
-        val withoutChecksum = mutableListOf(format, targetAddress and 0xFF, testerAddress and 0xFF)
-        withoutChecksum.addAll(data)
-        val checksum = withoutChecksum.sumOf { it and 0xFF } and 0xFF
-        val frame = withoutChecksum.plus(checksum).map { (it and 0xFF).toByte() }.toByteArray()
+        val activeProfile = commProfile
+        val frame = KwpFrameCodec.buildFrame(targetAddress, testerAddress, serviceId, payload)
         transport.write(frame)
-        delay(commProfile.interFrameDelayMs)
-        val response = readDiscardingEcho(frame, commProfile.requestTimeoutMs)
+        delay(activeProfile.interFrameDelayMs)
+        val response = readDiscardingEcho(frame, activeProfile.requestTimeoutMs, targetAddress)
         return HexUtils.bytesToHex(response)
     }
 
@@ -89,41 +91,74 @@ class KdcanSession(
         )
     }
 
+    private data class ExecutionContext(
+        val target: EcuTarget,
+        val commProfile: CommProfile,
+    )
+
+    /** Executes a diagnostic job using the target selected when the transaction starts. */
     suspend fun execute(job: BmwJob): JobResult = mutex.withLock {
+        executeLocked(job, ExecutionContext(target, commProfile))
+    }
+
+    /**
+     * Executes a job for [target] with an immutable target/profile context. This keeps
+     * target selection, frame construction, frame validation, and payload decoding
+     * aligned even when polling and UI selection coroutines share one serial session.
+     */
+    suspend fun executeOnTarget(target: EcuTarget, job: BmwJob): JobResult = mutex.withLock {
+        executeLocked(
+            job = job,
+            context = ExecutionContext(target, BmwCommProfiles.forTarget(target, vehicleProfile)),
+        )
+    }
+
+    private suspend fun executeLocked(job: BmwJob, context: ExecutionContext): JobResult {
+        val activeTarget = context.target
+        val activeProfile = context.commProfile
         val stepResults = mutableListOf<StepResult>()
         
         // Purge any stale data from previous jobs or failed reads
         runCatching { transport.purge() }
 
-        if (commProfile.autoTesterPresentBeforeJob && job.category != JobCategory.SESSION) {
+        if (activeProfile.autoTesterPresentBeforeJob && job.category != JobCategory.SESSION) {
             runCatching {
-                val keepAliveRequest = buildFrame(0x3E, listOf(0x00))
+                val keepAliveRequest = buildFrame(activeTarget, 0x3E, listOf(0x00))
                 transport.write(keepAliveRequest)
-                delay(commProfile.interFrameDelayMs)
-                readDiscardingEcho(keepAliveRequest, commProfile.requestTimeoutMs.coerceAtMost(900))
+                delay(activeProfile.interFrameDelayMs)
+                readDiscardingEcho(keepAliveRequest, activeProfile.requestTimeoutMs.coerceAtMost(900), activeTarget.targetAddress)
             }
         }
-        if (commProfile.preJobDelayMs > 0) delay(commProfile.preJobDelayMs)
-        for (step in job.steps) {
-            val request = buildFrame(step.serviceId, step.payload)
+        if (activeProfile.preJobDelayMs > 0) delay(activeProfile.preJobDelayMs)
+        val stepsToRun = if (canReuseLiveSession(activeTarget, job)) {
+            job.steps.dropWhile { it.serviceId == 0x10 || it.serviceId == 0x3E }
+        } else {
+            job.steps
+        }
+        for (step in stepsToRun) {
+            val request = buildFrame(activeTarget, step.serviceId, step.payload)
             var lastResult: StepResult? = null
-            for (attempt in 0..commProfile.retries) {
+            for (attempt in 0..activeProfile.retries) {
                 if (attempt > 0) {
                     // Purge before retry to clear whatever caused the previous failure
                     runCatching { transport.purge() }
                 }
                 transport.write(request)
-                delay(commProfile.interFrameDelayMs)
-                val response = readDiscardingEcho(request, commProfile.requestTimeoutMs)
-                val result = parseStepResponse(request, response, step, job, attempt)
+                delay(activeProfile.interFrameDelayMs)
+                val response = readDiscardingEcho(request, activeProfile.requestTimeoutMs, activeTarget.targetAddress)
+                val result = parseStepResponse(request, response, step, job, activeTarget, attempt)
                 lastResult = result
-                val shouldRetry = !result.success && attempt < commProfile.retries && shouldRetry(result)
+                val shouldRetry = !result.success && attempt < activeProfile.retries && shouldRetry(result)
                 if (!shouldRetry) break
-                delay((commProfile.interFrameDelayMs * (attempt + 2)).coerceAtMost(180L))
+                delay((activeProfile.interFrameDelayMs * (attempt + 2)).coerceAtMost(180L))
             }
             val finalResult = lastResult ?: StepResult(step.label, HexUtils.bytesToHex(request), "", false, "No response")
             stepResults += finalResult
+            if (step.serviceId == 0x10 && finalResult.success) {
+                activeSessionSinceMs[activeTarget.targetAddress] = System.currentTimeMillis()
+            }
             if (!finalResult.success) {
+                activeSessionSinceMs.remove(activeTarget.targetAddress)
                 break
             }
         }
@@ -131,16 +166,16 @@ class KdcanSession(
         val last = stepResults.lastOrNull()
         return JobResult(
             job = job,
-            target = target,
+            target = activeTarget,
             requestHex = stepResults.joinToString(" | ") { it.requestHex },
             responseHex = stepResults.joinToString(" | ") { it.responseHex.ifBlank { "<empty>" } },
             success = stepResults.isNotEmpty() && stepResults.all { it.success },
             summary = summarizeJob(job, stepResults),
             decoded = buildMap {
-                put("comm_profile", commProfile.name)
-                put("comm_timeout_ms", commProfile.requestTimeoutMs.toString())
-                put("comm_retries", commProfile.retries.toString())
-                put("comm_inter_frame_ms", commProfile.interFrameDelayMs.toString())
+                put("comm_profile", activeProfile.name)
+                put("comm_timeout_ms", activeProfile.requestTimeoutMs.toString())
+                put("comm_retries", activeProfile.retries.toString())
+                put("comm_inter_frame_ms", activeProfile.interFrameDelayMs.toString())
                 // First add all decoded fields without prefix for easy UI access
                 stepResults.forEach { step -> putAll(step.decoded) }
                 // Then add prefixed versions for disambiguation
@@ -152,7 +187,14 @@ class KdcanSession(
         )
     }
 
-    private fun buildFrame(serviceId: Int, payload: List<Int>): ByteArray =
+    private fun canReuseLiveSession(target: EcuTarget, job: BmwJob): Boolean {
+        if (job.category != JobCategory.LIVE_DATA) return false
+        val lastStarted = activeSessionSinceMs[target.targetAddress] ?: return false
+        val hasStandardSetup = job.steps.take(2).map { it.serviceId } == listOf(0x10, 0x3E)
+        return hasStandardSetup && System.currentTimeMillis() - lastStarted <= LIVE_SESSION_REUSE_WINDOW_MS
+    }
+
+    private fun buildFrame(target: EcuTarget, serviceId: Int, payload: List<Int>): ByteArray =
         KwpFrameCodec.buildFrame(
             targetAddress = target.targetAddress,
             sourceAddress = testerAddress,
@@ -160,7 +202,14 @@ class KdcanSession(
             payload = payload,
         )
 
-    private fun parseStepResponse(request: ByteArray, response: ByteArray, step: JobStep, job: BmwJob, attempt: Int = 0): StepResult {
+    private fun parseStepResponse(
+        request: ByteArray,
+        response: ByteArray,
+        step: JobStep,
+        job: BmwJob,
+        target: EcuTarget,
+        attempt: Int = 0,
+    ): StepResult {
         val requestHex = HexUtils.bytesToHex(request)
         val responseHex = HexUtils.bytesToHex(response)
         if (response.isEmpty()) {
@@ -197,7 +246,7 @@ class KdcanSession(
                 responseHex = responseHex,
                 success = false,
                 summary = "Negative response to 0x${negativeFor.toString(16).uppercase()} NRC 0x${code.toString(16).uppercase()}${if (attempt > 0) " after retry ${attempt + 1}" else ""}",
-                decoded = decodePayload(job, step, payload)
+                decoded = decodePayload(job, step, target, payload)
             )
         }
 
@@ -209,7 +258,7 @@ class KdcanSession(
             responseHex = responseHex,
             success = success,
             summary = summarize(step, job, payload, attempt),
-            decoded = decodePayload(job, step, payload)
+            decoded = decodePayload(job, step, target, payload)
         )
     }
 
@@ -244,7 +293,7 @@ class KdcanSession(
         }
     }
 
-    private fun decodePayload(job: BmwJob, step: JobStep, payload: List<Int>): Map<String, String> {
+    private fun decodePayload(job: BmwJob, step: JobStep, target: EcuTarget, payload: List<Int>): Map<String, String> {
         return BmwPayloadDecoders.decode(
             context = DecodeContext(target = target, step = step),
             payload = payload,
@@ -270,7 +319,11 @@ class KdcanSession(
      * only a complete exact echo, and returns a complete frame addressed back to this
      * tester. Delayed response-pending (0x7F .. 0x78) frames are not treated as final.
      */
-    private suspend fun readDiscardingEcho(request: ByteArray, timeoutMs: Int): ByteArray {
+    private suspend fun readDiscardingEcho(
+        request: ByteArray,
+        timeoutMs: Int,
+        expectedSourceAddress: Int? = null,
+    ): ByteArray {
         val deadline = System.currentTimeMillis() + timeoutMs
         var buffered = ByteArray(0)
         var echoDecisionPending = true
@@ -301,7 +354,7 @@ class KdcanSession(
 
             if (echoDecisionPending) continue
 
-            val matching = matchingResponseFrame(buffered)
+            val matching = matchingResponseFrame(buffered, expectedSourceAddress)
             if (matching != null) {
                 val parsed = KwpFrameCodec.parse(matching)
                 if (parsed != null && !KwpFrameCodec.isResponsePending(parsed)) return matching
@@ -311,16 +364,18 @@ class KdcanSession(
             }
         }
 
-        return matchingResponseFrame(buffered) ?: firstOtherFrame ?: firstCompleteFrame(buffered) ?: buffered
+        return matchingResponseFrame(buffered, expectedSourceAddress) ?: firstOtherFrame ?: firstCompleteFrame(buffered) ?: buffered
     }
 
-    private fun matchingResponseFrame(buffer: ByteArray): ByteArray? {
+    private fun matchingResponseFrame(buffer: ByteArray, expectedSourceAddress: Int?): ByteArray? {
         var offset = 0
         var pendingFrame: ByteArray? = null
         while (offset < buffer.size) {
             val located = KwpFrameCodec.findFirstCompleteFrame(buffer, offset) ?: break
             offset = located.offset + located.frame.bytes.size
-            if (located.frame.targetAddress != testerAddress || located.frame.sourceAddress != target.targetAddress) continue
+            if (located.frame.targetAddress != testerAddress ||
+                (expectedSourceAddress != null && located.frame.sourceAddress != expectedSourceAddress)
+            ) continue
             if (!KwpFrameCodec.isResponsePending(located.frame)) return located.frame.bytes
             pendingFrame = located.frame.bytes
         }

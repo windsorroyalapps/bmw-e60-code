@@ -50,8 +50,7 @@ class LiveDataPoller(
                     for (bmwJob in config.jobs) {
                         if (!isActive) break
                         try {
-                            session.setTarget(config.target)
-                            val result = session.execute(bmwJob)
+                            val result = session.executeOnTarget(config.target, bmwJob)
                             val pollResult = PollResult(
                                 target = config.target,
                                 job = bmwJob,

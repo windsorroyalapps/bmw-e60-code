@@ -875,8 +875,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                     val job = BmwJobs.byId(jobId)?.takeIf { it.appliesTo(target) } ?: return@forEach
                     runCatching {
                         activeSession.setVehicleProfile(_state.value.profile.vehicleProfile)
-                        activeSession.setTarget(target)
-                        val result = activeSession.execute(job)
+                        val result = activeSession.executeOnTarget(target, job)
                         applyJobResult(result, updateSelection = false, logDetail = false, snapshotTitleSuffix = " [poll]")
                     }.onFailure { t ->
                         log("POLL", "${target.name} ${job.label}: ${t.message ?: t.javaClass.simpleName}")
@@ -1913,9 +1912,11 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 val target = targets().firstOrNull { it.name == targetId } ?: error("Unknown target $targetId")
                 val job = BmwJobs.byId(jobId)?.takeIf { it.appliesTo(target) }
                     ?: error("Unknown job $jobId for target ${target.name}")
+                // A manual diagnostic request must not compete with the dashboard for the
+                // shared serial interface. The next polling run can be started explicitly.
+                stopPollingInternal(false)
                 activeSession.setVehicleProfile(_state.value.profile.vehicleProfile)
-                activeSession.setTarget(target)
-                val result = activeSession.execute(job)
+                val result = activeSession.executeOnTarget(target, job)
                 applyJobResult(result, updateSelection = true, logDetail = true)
             }
         }
