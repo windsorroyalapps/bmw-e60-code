@@ -57,6 +57,17 @@ class KdcanSessionTest {
     }
 
     @Test
+    fun `E60 DME probe reaches live local identifiers without tester present`() = runBlocking {
+        val transport = AddressAwareTransport()
+        val session = KdcanSession(transport, BmwTargets.DME)
+        val result = session.executeOnTarget(BmwTargets.DME, BmwJobs.byId("e60_dme_probe_pack")!!)
+
+        assertTrue(result.success)
+        assertTrue(transport.requestedServices.containsAll(listOf(0x10, 0x1A, 0x21, 0x18)))
+        assertFalse(transport.requestedServices.contains(0x3E))
+    }
+
+    @Test
     fun `CAS terminal polling uses CAS address and bypasses tester present`() = runBlocking {
         val transport = AddressAwareTransport()
         val session = KdcanSession(transport, BmwTargets.DME)
