@@ -7,5 +7,5 @@ object HexUtils {
         return clean.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
     }
 
-    fun bytesToHex(bytes: ByteArray): String = bytes.joinToString(" ") { "%02X".format(it) }
+    fun bytesToHex(bytes: ByteArray): String = bytes.joinToString(" ") { "%02X".format(it.toInt() and 0xFF) }
 }
