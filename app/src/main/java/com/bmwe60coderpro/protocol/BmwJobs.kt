@@ -60,9 +60,12 @@ object BmwTargets {
 private fun step(serviceId: Int, vararg payload: Int, label: String) =
     JobStep(serviceId = serviceId, payload = payload.toList(), label = label)
 
+// Some BMW DME/DDE variants accept a diagnostic session but reject service 0x3E
+// with NRC 0x22. Keep the generic read-only path to the universally required
+// session-start request; KdcanSession only sends a keep-alive after the ECU has
+// explicitly demonstrated tester-present support.
 private fun standardSessionPack() = listOf(
     step(0x10, 0x81, label = "Default session"),
-    step(0x3E, 0x00, label = "Tester present"),
 )
 
 object BmwJobs {

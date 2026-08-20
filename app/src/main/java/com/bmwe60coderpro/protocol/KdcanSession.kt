@@ -19,6 +19,8 @@ class KdcanSession(
     private val mutex = Mutex()
     /** Last successful diagnostic-session start per ECU address; guarded by [mutex]. */
     private val activeSessionSinceMs = mutableMapOf<Int, Long>()
+    /** Tester-present is opt-in per ECU because some BMW modules reject service 0x3E. */
+    private val testerPresentSupported = mutableSetOf<Int>()
 
     fun getTransport(): Transport = transport
     private var commProfile: CommProfile = BmwCommProfiles.forTarget(target, vehicleProfile)
@@ -28,7 +30,10 @@ class KdcanSession(
     }
 
     fun setVehicleProfile(vehicleProfile: VehicleProfileKind) {
-        if (this.vehicleProfile != vehicleProfile) activeSessionSinceMs.clear()
+        if (this.vehicleProfile != vehicleProfile) {
+            activeSessionSinceMs.clear()
+            testerPresentSupported.clear()
+        }
         this.vehicleProfile = vehicleProfile
         this.commProfile = BmwCommProfiles.forTarget(target, vehicleProfile)
     }
@@ -121,7 +126,10 @@ class KdcanSession(
         // Purge any stale data from previous jobs or failed reads
         runCatching { transport.purge() }
 
-        if (activeProfile.autoTesterPresentBeforeJob && job.category != JobCategory.SESSION) {
+        if (activeProfile.autoTesterPresentBeforeJob &&
+            activeTarget.targetAddress in testerPresentSupported &&
+            job.category != JobCategory.SESSION
+        ) {
             runCatching {
                 val keepAliveRequest = buildFrame(activeTarget, 0x3E, listOf(0x00))
                 transport.write(keepAliveRequest)
@@ -157,6 +165,9 @@ class KdcanSession(
             if (step.serviceId == 0x10 && finalResult.success) {
                 activeSessionSinceMs[activeTarget.targetAddress] = System.currentTimeMillis()
             }
+            if (step.serviceId == 0x3E && finalResult.success) {
+                testerPresentSupported += activeTarget.targetAddress
+            }
             if (!finalResult.success) {
                 activeSessionSinceMs.remove(activeTarget.targetAddress)
                 break
@@ -190,7 +201,7 @@ class KdcanSession(
     private fun canReuseLiveSession(target: EcuTarget, job: BmwJob): Boolean {
         if (job.category != JobCategory.LIVE_DATA) return false
         val lastStarted = activeSessionSinceMs[target.targetAddress] ?: return false
-        val hasStandardSetup = job.steps.take(2).map { it.serviceId } == listOf(0x10, 0x3E)
+        val hasStandardSetup = job.steps.firstOrNull()?.serviceId == 0x10
         return hasStandardSetup && System.currentTimeMillis() - lastStarted <= LIVE_SESSION_REUSE_WINDOW_MS
     }
 

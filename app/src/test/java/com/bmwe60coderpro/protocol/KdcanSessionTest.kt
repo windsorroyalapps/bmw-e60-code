@@ -46,6 +46,17 @@ class KdcanSessionTest {
     }
 
     @Test
+    fun `live data continues to the local identifier after session start without tester present`() = runBlocking {
+        val transport = AddressAwareTransport()
+        val session = KdcanSession(transport, BmwTargets.DME)
+        val result = session.executeOnTarget(BmwTargets.DME, BmwJobs.byId("dme_live_basic")!!)
+
+        assertTrue(result.success)
+        assertTrue(transport.requestedServices.containsAll(listOf(0x10, 0x21)))
+        assertFalse(transport.requestedServices.contains(0x3E))
+    }
+
+    @Test
     fun `concurrent diagnostic requests keep their selected ECU target`() = runBlocking {
         val transport = AddressAwareTransport()
         val session = KdcanSession(transport, BmwTargets.DME)
@@ -86,6 +97,7 @@ class KdcanSessionTest {
     private class AddressAwareTransport : Transport {
         private val reads = ArrayDeque<ByteArray>()
         val requestedTargets = mutableListOf<Int>()
+        val requestedServices = mutableListOf<Int>()
 
         override suspend fun listDevices(): List<DeviceInfo> = emptyList()
         override suspend fun connect(targetId: String?) = Unit
@@ -96,6 +108,7 @@ class KdcanSessionTest {
         override suspend fun write(bytes: ByteArray) {
             val request = assertNotNull(KwpFrameCodec.parse(bytes))
             requestedTargets += request.targetAddress
+            requestedServices += request.payload.first()
             val response = KwpFrameCodec.buildFrame(
                 targetAddress = 0xF1,
                 sourceAddress = request.targetAddress,
