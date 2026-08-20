@@ -1994,19 +1994,35 @@ class MainViewModel(private val application: Application) : ViewModel() {
         }
     }
 
-    private fun dashboardPollPlan(): List<Pair<String, String>> = listOf(
-        BmwTargets.DME.name to "dme_live_basic",
-        BmwTargets.DME.name to "dme_live_air",
-        BmwTargets.EGS.name to "egs_live_basic",
-        BmwTargets.EGS.name to "egs_live_temp",
-        BmwTargets.DSC.name to "dsc_live_status",
-        BmwTargets.DSC.name to "dsc_live_wheels",
-        // Cluster drive data is a useful read-only fallback for RPM/speed when an
-        // ECU-specific DME or DSC local identifier is unavailable on this car.
-        BmwTargets.KOMBI.name to "kombi_live_drive",
-        BmwTargets.CAS.name to "cas_live_terminals",
-    ).filter { (targetId, jobId) ->
-        targets().any { it.name == targetId } && BmwJobs.byId(jobId) != null
+    private fun dashboardPollPlan(): List<Pair<String, String>> {
+        val plan = when (_state.value.profile.vehicleProfile) {
+            // On the E60 LCI N52 profile, the DME rejects the generic BMW 0x21
+            // local identifiers. Poll standard OBD Mode 01 data directly from the
+            // DME instead. Every PID is independent, so optional voltage support
+            // cannot suppress the core RPM, speed, coolant, or throttle gauges.
+            VehicleProfileKind.N52_6HP -> listOf(
+                BmwTargets.DME.name to "n52_obd_rpm",
+                BmwTargets.DME.name to "n52_obd_speed",
+                BmwTargets.DME.name to "n52_obd_coolant",
+                BmwTargets.DME.name to "n52_obd_throttle",
+                BmwTargets.DME.name to "n52_obd_voltage",
+            )
+            else -> listOf(
+                BmwTargets.DME.name to "dme_live_basic",
+                BmwTargets.DME.name to "dme_live_air",
+                BmwTargets.EGS.name to "egs_live_basic",
+                BmwTargets.EGS.name to "egs_live_temp",
+                BmwTargets.DSC.name to "dsc_live_status",
+                BmwTargets.DSC.name to "dsc_live_wheels",
+                // Cluster drive data is a useful read-only fallback for RPM/speed when an
+                // ECU-specific DME or DSC local identifier is unavailable on this car.
+                BmwTargets.KOMBI.name to "kombi_live_drive",
+                BmwTargets.CAS.name to "cas_live_terminals",
+            )
+        }
+        return plan.filter { (targetId, jobId) ->
+            targets().any { it.name == targetId } && BmwJobs.byId(jobId) != null
+        }
     }
 
     private fun currentTarget(): EcuTarget {

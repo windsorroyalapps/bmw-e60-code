@@ -68,6 +68,24 @@ class KdcanSessionTest {
     }
 
     @Test
+    fun `N52 gauge jobs use independent standard OBD current-data requests`() {
+        val expectedPids = mapOf(
+            "n52_obd_rpm" to 0x0C,
+            "n52_obd_speed" to 0x0D,
+            "n52_obd_coolant" to 0x05,
+            "n52_obd_throttle" to 0x11,
+            "n52_obd_voltage" to 0x42,
+        )
+
+        expectedPids.forEach { (jobId, pid) ->
+            val job = requireNotNull(BmwJobs.byId(jobId))
+            assertTrue(job.steps.size == 1)
+            assertTrue(job.steps.single().serviceId == 0x01)
+            assertTrue(job.steps.single().payload == listOf(pid))
+        }
+    }
+
+    @Test
     fun `CAS terminal polling uses CAS address and bypasses tester present`() = runBlocking {
         val transport = AddressAwareTransport()
         val session = KdcanSession(transport, BmwTargets.DME)

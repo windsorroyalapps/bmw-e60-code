@@ -531,6 +531,50 @@ object BmwJobs {
             description = "Read DME air mass, torque or injection related values.",
             supportedTargets = setOf(BmwTargets.DME.name),
         ),
+        // The E60 LCI N52 DME can reject BMW's proprietary 0x21 local identifiers
+        // while still exposing emissions-mandated OBD Mode 01 PIDs over D-CAN. Keep
+        // each PID in a separate read so an unsupported optional value does not hide
+        // RPM, speed, coolant, or throttle from the dashboard.
+        BmwJob(
+            id = "n52_obd_rpm",
+            label = "N52 OBD live data: engine speed",
+            category = JobCategory.LIVE_DATA,
+            steps = listOf(step(0x01, 0x0C, label = "OBD engine speed PID 0x0C")),
+            description = "Read standard OBD engine RPM for N52 DME gauge fallback.",
+            supportedTargets = setOf(BmwTargets.DME.name),
+        ),
+        BmwJob(
+            id = "n52_obd_speed",
+            label = "N52 OBD live data: vehicle speed",
+            category = JobCategory.LIVE_DATA,
+            steps = listOf(step(0x01, 0x0D, label = "OBD vehicle speed PID 0x0D")),
+            description = "Read standard OBD vehicle speed for N52 DME gauge fallback.",
+            supportedTargets = setOf(BmwTargets.DME.name),
+        ),
+        BmwJob(
+            id = "n52_obd_coolant",
+            label = "N52 OBD live data: coolant temperature",
+            category = JobCategory.LIVE_DATA,
+            steps = listOf(step(0x01, 0x05, label = "OBD coolant temperature PID 0x05")),
+            description = "Read standard OBD coolant temperature for N52 DME gauge fallback.",
+            supportedTargets = setOf(BmwTargets.DME.name),
+        ),
+        BmwJob(
+            id = "n52_obd_throttle",
+            label = "N52 OBD live data: throttle position",
+            category = JobCategory.LIVE_DATA,
+            steps = listOf(step(0x01, 0x11, label = "OBD throttle position PID 0x11")),
+            description = "Read standard OBD throttle position for N52 DME gauge fallback.",
+            supportedTargets = setOf(BmwTargets.DME.name),
+        ),
+        BmwJob(
+            id = "n52_obd_voltage",
+            label = "N52 OBD live data: control-module voltage",
+            category = JobCategory.LIVE_DATA,
+            steps = listOf(step(0x01, 0x42, label = "OBD control-module voltage PID 0x42")),
+            description = "Read optional standard OBD control-module voltage for N52 DME gauge fallback.",
+            supportedTargets = setOf(BmwTargets.DME.name),
+        ),
         BmwJob(
             id = "egs_live_basic",
             label = "EGS live data: gears / speeds",

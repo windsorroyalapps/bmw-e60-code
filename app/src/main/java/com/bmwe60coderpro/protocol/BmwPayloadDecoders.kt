@@ -23,6 +23,7 @@ object BmwPayloadDecoders {
             0x5A -> decodeIdentification(context, data, map)
             0x58 -> decodeDtcBlock(context, data, map)
             0x54 -> map["result"] = "fault memory clear acknowledged"
+            0x41 -> decodeObdCurrentData(data, map)
             0x61 -> decodeLocalIdentifier(context, data, map)
             0x7E -> map["result"] = "tester present acknowledged"
             0x7F -> decodeNegativeResponse(payload, map)
@@ -90,6 +91,49 @@ object BmwPayloadDecoders {
         map["dtc_known_count"] = knownCount.toString()
         map["dtc_nonzero_status_count"] = statusActive.toString()
         if (dtcTriples.none { it.size >= 2 }) map["dtc_info"] = "No DTC triples recognised; inspect payload hex"
+    }
+
+    /**
+     * Decodes emissions-mandated OBD Mode 01 replies (positive service 0x41).
+     * These provide a D-CAN-compatible N52 fallback when a DME rejects BMW's
+     * proprietary ReadDataByLocalIdentifier service (0x21).
+     */
+    private fun decodeObdCurrentData(data: List<Int>, map: MutableMap<String, String>) {
+        val pid = data.firstOrNull() ?: return
+        val body = data.drop(1)
+        map["obd_mode"] = "0x01"
+        map["obd_pid"] = "0x%02X".format(pid)
+        map["data_len"] = body.size.toString()
+        map["data_hex"] = HexUtils.bytesToHex(body.map { it.toByte() }.toByteArray())
+
+        when (pid) {
+            0x05 -> body.firstOrNull()?.let {
+                map["obd_pid_label"] = "engine coolant temperature"
+                map["coolant_temp_c"] = (it - 40).toString()
+            }
+            0x0C -> u16(body, 0)?.let {
+                map["obd_pid_label"] = "engine speed"
+                map["engine_speed_rpm"] = oneDecimal(it / 4.0)
+            }
+            0x0D -> body.firstOrNull()?.let {
+                map["obd_pid_label"] = "vehicle speed"
+                map["vehicle_speed_kph"] = it.toString()
+            }
+            0x11 -> body.firstOrNull()?.let {
+                map["obd_pid_label"] = "throttle position"
+                map["throttle_angle_pct"] = oneDecimal(it * 100.0 / 255.0)
+            }
+            0x42 -> u16(body, 0)?.let {
+                map["obd_pid_label"] = "control-module voltage"
+                map["battery_v"] = oneDecimal(it / 1000.0)
+            }
+            else -> {
+                map["obd_pid_label"] = "unsupported current-data PID"
+                body.take(12).forEachIndexed { index, value ->
+                    map["byte_$index"] = "0x%02X".format(value)
+                }
+            }
+        }
     }
 
     private fun decodeLocalIdentifier(context: DecodeContext, data: List<Int>, map: MutableMap<String, String>) {
