@@ -421,7 +421,19 @@ class MainViewModel(private val application: Application) : ViewModel() {
         _state.value = _state.value.copy(bluetoothScanning = true)
         viewModelScope.launch {
             try {
-                val adapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
+                    androidx.core.content.ContextCompat.checkSelfPermission(
+                        application,
+                        android.Manifest.permission.BLUETOOTH_CONNECT,
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    _state.value = _state.value.copy(
+                        bluetoothScanning = false,
+                        dashboardStatus = "Bluetooth permission is required to inspect paired devices."
+                    )
+                    return@launch
+                }
+                val adapter = application.getSystemService(android.bluetooth.BluetoothManager::class.java)?.adapter
                 if (adapter == null || !adapter.isEnabled) {
                     _state.value = _state.value.copy(
                         bluetoothScanning = false,
@@ -599,7 +611,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
         val json = org.json.JSONObject()
         json.put("source", "bmw-e60-code")
         json.put("exportType", "cas_key_data")
-        json.put("exportDate", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date()))
+        json.put("exportDate", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date()))
         json.put("isn", result.isn)
         json.put("vin", result.vin)
         json.put("moduleVersion", result.moduleVersion)
@@ -624,7 +636,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
         val ak90Json = org.json.JSONObject()
         ak90Json.put("format", "ak90-plus-v1")
         ak90Json.put("sourceApp", "bmw-e60-code")
-        ak90Json.put("exportDate", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(java.util.Date()))
+        ak90Json.put("exportDate", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date()))
         val vehicleObj = org.json.JSONObject()
         vehicleObj.put("vin", result.vin)
         vehicleObj.put("isn", result.isn)
@@ -2212,7 +2224,7 @@ class MainViewModel(private val application: Application) : ViewModel() {
                     _state.value = _state.value.copy(dashboardStatus = "Bluetooth MAC address required")
                     throw IllegalArgumentException("Bluetooth MAC address required")
                 }
-                BluetoothTransport(profile.bluetoothMac, profile.connectTimeoutMs, profile.readTimeoutMs)
+                BluetoothTransport(application, profile.bluetoothMac, profile.connectTimeoutMs, profile.readTimeoutMs)
             }
         }
     }

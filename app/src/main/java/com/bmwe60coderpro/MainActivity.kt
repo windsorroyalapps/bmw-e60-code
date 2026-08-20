@@ -9,6 +9,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.content.IntentCompat
 import com.bmwe60coderpro.ui.AppRoot
 import com.bmwe60coderpro.ui.MainViewModel
 
@@ -39,6 +40,7 @@ class MainActivity : ComponentActivity() {
     }
 
     /** Forward gamepad button events (A, B, RB, LB, etc.) to the ViewModel. */
+    @Suppress("RestrictedApi") // Required to preserve normal Activity event dispatch after controller handling.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (viewModel.onControllerKey(event)) return true
         return super.dispatchKeyEvent(event)
@@ -47,7 +49,7 @@ class MainActivity : ComponentActivity() {
     private fun handleUsbIntent(intent: Intent?) {
         when (intent?.action) {
             UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
-                val device = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
+                val device = IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
                 Log.d(TAG, "USB attached: ${device?.deviceName}")
             }
             UsbManager.ACTION_USB_DEVICE_DETACHED -> {

@@ -1,8 +1,14 @@
 package com.bmwe60coderpro.network
 
+import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.bluetooth.BluetoothManager
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import com.bmwe60coderpro.data.DeviceInfo
 import com.bmwe60coderpro.protocol.Transport
 import com.bmwe60coderpro.util.HexUtils
@@ -14,11 +20,13 @@ import java.io.OutputStream
 import java.util.UUID
 
 class BluetoothTransport(
+    context: Context,
     private val deviceAddress: String,
     private val connectTimeoutMs: Int = 10000,
     private val readTimeoutMs: Int = 3000
 ) : Transport {
 
+    private val applicationContext = context.applicationContext
     private var socket: BluetoothSocket? = null
     private var inputStream: InputStream? = null
     private var outputStream: OutputStream? = null
@@ -32,7 +40,13 @@ class BluetoothTransport(
     }
 
     override suspend fun listDevices(): List<DeviceInfo> = withContext(Dispatchers.IO) {
-        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return@withContext emptyList()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(
+                applicationContext,
+                Manifest.permission.BLUETOOTH_CONNECT,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) return@withContext emptyList()
+        val adapter = bluetoothAdapter() ?: return@withContext emptyList()
         if (!adapter.isEnabled) return@withContext emptyList()
         adapter.bondedDevices?.map {
             DeviceInfo(it.address, it.name ?: "Unknown")
@@ -40,7 +54,15 @@ class BluetoothTransport(
     }
 
     override suspend fun connect(targetId: String?) = withContext(Dispatchers.IO) {
-        val adapter = BluetoothAdapter.getDefaultAdapter() ?: throw IllegalStateException("Bluetooth not available")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(
+                applicationContext,
+                Manifest.permission.BLUETOOTH_CONNECT,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            throw SecurityException("Bluetooth Connect permission is required")
+        }
+        val adapter = bluetoothAdapter() ?: throw IllegalStateException("Bluetooth not available")
         if (!adapter.isEnabled) throw IllegalStateException("Bluetooth is disabled")
 
         val address = targetId ?: deviceAddress
@@ -137,7 +159,13 @@ class BluetoothTransport(
     }
 
     fun getDeviceInfo(mac: String): Pair<String, String>? {
-        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(
+                applicationContext,
+                Manifest.permission.BLUETOOTH_CONNECT,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) return null
+        val adapter = bluetoothAdapter() ?: return null
         if (!adapter.isEnabled) return null
         return try {
             val device = adapter.getRemoteDevice(mac)
@@ -148,6 +176,9 @@ class BluetoothTransport(
             null
         }
     }
+
+    private fun bluetoothAdapter(): BluetoothAdapter? =
+        applicationContext.getSystemService(BluetoothManager::class.java)?.adapter
 
     private fun sendRaw(command: String) {
         val data = (command + "\r").toByteArray(Charsets.US_ASCII)

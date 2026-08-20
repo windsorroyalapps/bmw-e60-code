@@ -6,7 +6,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.Slider
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -751,7 +750,7 @@ private fun CccScreen(state: AppState, vm: MainViewModel) {
                         style = MaterialTheme.typography.bodySmall)
                 }
 
-                Divider()
+                HorizontalDivider()
                 Text("Live CCC probe", style = MaterialTheme.typography.labelMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
@@ -828,7 +827,7 @@ private fun SteeringScreen(state: AppState, vm: MainViewModel) {
             Text(state.steeringValidationSummary, fontFamily = FontFamily.Monospace)
 
             Spacer(Modifier.height(8.dp))
-            Divider()
+            HorizontalDivider()
             Spacer(Modifier.height(8.dp))
 
             // ── Live SZL monitor + MFL injector ───────────────────────────
@@ -1159,7 +1158,7 @@ private fun ExperimentalScreen(state: AppState, vm: MainViewModel) {
                     Text("Scan for controller")
                 }
 
-                Divider()
+                HorizontalDivider()
 
                 // ── Channel toggles ────────────────────────────────────────
                 Text("Active channels", style = MaterialTheme.typography.labelMedium)
@@ -1211,7 +1210,7 @@ private fun ExperimentalScreen(state: AppState, vm: MainViewModel) {
                     enabled = !isRunning,
                 )
 
-                Divider()
+                HorizontalDivider()
 
                 // ── Start / Stop / E-Stop ──────────────────────────────────
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1248,7 +1247,7 @@ private fun ExperimentalScreen(state: AppState, vm: MainViewModel) {
                     )
                 }
 
-                Divider()
+                HorizontalDivider()
 
                 // ── Live axis readout ──────────────────────────────────────
                 Text("Live axes", style = MaterialTheme.typography.labelMedium)
@@ -1360,7 +1359,7 @@ private fun ExperimentalScreen(state: AppState, vm: MainViewModel) {
                     }
                 }
 
-                Divider()
+                HorizontalDivider()
 
                 // ── Connection readiness indicator ─────────────────────────
                 val canSendLocal = state.remoteStartMode == RemoteStartMode.LOCAL_KDCAN && state.connected
@@ -1407,7 +1406,7 @@ private fun ExperimentalScreen(state: AppState, vm: MainViewModel) {
                     SafetyCheckItem("Battery voltage > 11.5V", state.safetyVoltageOk)
                 }
 
-                Divider()
+                HorizontalDivider()
 
                 // ── Start / Stop ───────────────────────────────────────────
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1869,7 +1868,7 @@ private fun DedicatedServiceModuleCard(vm: MainViewModel, state: AppState, def: 
 
             // Key data section for CAS screen
             if (def.screen == ServiceScreen.CAS) {
-                Divider(Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
                 Text("Key Data (No Key Required)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
                 Button(
@@ -2026,7 +2025,7 @@ private fun DedicatedServiceModuleCard(vm: MainViewModel, state: AppState, def: 
                 if (!state.connected) {
                     Text("Connect to vehicle first.", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
                 }
-                Divider(Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
             }
 
             if (snapshot == null) {
@@ -2094,7 +2093,7 @@ private fun ConnectionStatusPopup(state: AppState, vm: MainViewModel) {
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.primary
                 )
-                Divider()
+                HorizontalDivider()
                 LazyColumn(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp)

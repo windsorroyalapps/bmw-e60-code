@@ -7,8 +7,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
-import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -32,12 +32,12 @@ class UsbPermissionManager(private val context: Context) {
                 deferred.complete(granted)
             }
         }
-        val filter = IntentFilter(ACTION_USB_PERMISSION)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            context.registerReceiver(receiver, filter)
-        }
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(ACTION_USB_PERMISSION),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         val pendingIntent = PendingIntent.getBroadcast(
             context, device.deviceId, Intent(ACTION_USB_PERMISSION),
             PendingIntent.FLAG_IMMUTABLE

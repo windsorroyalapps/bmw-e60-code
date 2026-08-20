@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.bmwe60coderpro">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- USB OBD2 -->
     <uses-feature android:name="android.hardware.usb.host" android:required="true" />
@@ -36,7 +35,6 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.BMWE60CoderPro"
         android:usesCleartextTraffic="true"
-        android:extractNativeLibs="true"
         android:requestLegacyExternalStorage="true">
 
         <activity
@@ -58,21 +56,7 @@
                 android:resource="@xml/device_filter" />
         </activity>
 
-        <service
-            android:name=".service.DiagnosticService"
-            android:foregroundServiceType="connectedDevice"
-            android:exported="false" />
-
-            <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
-            <provider
+        <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"

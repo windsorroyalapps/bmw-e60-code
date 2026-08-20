@@ -28,13 +28,25 @@ Cross-platform mobile app for BMW E60/E61 vehicle tuning and diagnostics via OBD
 
 ## Building
 
-Requires Android Studio with JDK 17.
+Use Android Studio with **JDK 17** and install **Android SDK Platform 35** (including Build-Tools). Android Studio creates the local, ignored `local.properties` file automatically. For command-line builds, configure it with your local SDK path:
 
-```bash
-./gradlew assembleRelease
+```properties
+sdk.dir=/absolute/path/to/Android/Sdk
 ```
 
-APK is signed automatically via GitHub Actions.
+Run the JVM unit tests before packaging:
+
+```bash
+./gradlew test
+```
+
+Build a debug APK locally:
+
+```bash
+./gradlew assembleDebug
+```
+
+The repository workflow builds a debug APK for pushes to `main` and exposes it as a GitHub Actions artifact.
 
 ## Safety Warning
 
