@@ -62,14 +62,31 @@ class KdcanSession(
         return HexUtils.bytesToHex(response)
     }
 
-    suspend fun tryIdentify(): String {
-        val start = runCatching { execute(BmwJobs.byId("start_session_default") ?: error("Job not found: start_session_default")) }.getOrNull()
-        val id = runCatching { execute(BmwJobs.byId("ecu_id_9A") ?: error("Job not found: ecu_id_9A")) }.getOrNull()
-        return buildString {
-            append("Target ${target.name}")
-            if (start != null) append(" | Session: ${start.summary}")
-            if (id != null) append(" | ID: ${id.summary}")
+    /**
+     * Verifies physical and protocol communication using read-only KWP requests.
+     * A USB port opening successfully is not enough to declare the vehicle connected.
+     */
+    suspend fun verifyCommunication(): ConnectionVerification {
+        val startJob = BmwJobs.byId("start_session_default") ?: error("Job not found: start_session_default")
+        val start = execute(startJob)
+        if (!start.success) {
+            return ConnectionVerification(
+                connected = false,
+                summary = "${target.name}: ${start.summary}",
+                responseHex = start.responseHex,
+            )
         }
+
+        val idJob = BmwJobs.byId("ecu_id_9A") ?: error("Job not found: ecu_id_9A")
+        val id = execute(idJob)
+        return ConnectionVerification(
+            connected = true,
+            summary = buildString {
+                append("${target.name}: ${start.summary}")
+                append(" | ID: ${id.summary}")
+            },
+            responseHex = id.responseHex.ifBlank { start.responseHex },
+        )
     }
 
     suspend fun execute(job: BmwJob): JobResult = mutex.withLock {
@@ -135,15 +152,13 @@ class KdcanSession(
         )
     }
 
-    private fun buildFrame(serviceId: Int, payload: List<Int>): ByteArray {
-        val data = mutableListOf(serviceId and 0xFF)
-        data.addAll(payload.map { it and 0xFF })
-        val format = 0x80 or (data.size and 0x3F)
-        val withoutChecksum = mutableListOf(format, target.targetAddress and 0xFF, testerAddress and 0xFF)
-        withoutChecksum.addAll(data)
-        val checksum = withoutChecksum.sumOf { it and 0xFF } and 0xFF
-        return withoutChecksum.plus(checksum).map { (it and 0xFF).toByte() }.toByteArray()
-    }
+    private fun buildFrame(serviceId: Int, payload: List<Int>): ByteArray =
+        KwpFrameCodec.buildFrame(
+            targetAddress = target.targetAddress,
+            sourceAddress = testerAddress,
+            serviceId = serviceId,
+            payload = payload,
+        )
 
     private fun parseStepResponse(request: ByteArray, response: ByteArray, step: JobStep, job: BmwJob, attempt: Int = 0): StepResult {
         val requestHex = HexUtils.bytesToHex(request)
@@ -151,9 +166,26 @@ class KdcanSession(
         if (response.isEmpty()) {
             return StepResult(step.label, requestHex, responseHex, false, if (attempt > 0) "No response after retry ${attempt + 1}" else "No response")
         }
-        val bytes = response.map { it.toInt() and 0xFF }
-        val dataStart = if (bytes.size >= 4) 3 else 0
-        val payload = if (bytes.size >= 5) bytes.subList(dataStart, bytes.size - 1) else bytes
+
+        val frame = KwpFrameCodec.parse(response)
+            ?: return StepResult(
+                label = step.label,
+                requestHex = requestHex,
+                responseHex = responseHex,
+                success = false,
+                summary = "Invalid KWP response frame (header, length, or checksum)",
+            )
+        if (frame.targetAddress != testerAddress || frame.sourceAddress != target.targetAddress) {
+            return StepResult(
+                label = step.label,
+                requestHex = requestHex,
+                responseHex = responseHex,
+                success = false,
+                summary = "Unexpected KWP response addresses: target 0x${frame.targetAddress.toString(16).uppercase()} source 0x${frame.sourceAddress.toString(16).uppercase()}",
+            )
+        }
+
+        val payload = frame.payload
         val service = payload.firstOrNull()
 
         if (service == 0x7F && payload.size >= 3) {
@@ -230,81 +262,83 @@ class KdcanSession(
         (deadlineMs - System.currentTimeMillis()).coerceAtLeast(0)
 
     /**
-     * Expected total length of a KWP2000 frame starting at buf[0], or null when
-     * the framing cannot be determined (yet).
+     * Reads a checksum-valid response frame while removing an optional local echo.
      *
-     * Format byte (ISO 14230):
-     *  - 0b10xx_xxxx: address info present, payload length in low 6 bits
-     *      total = 3 header bytes + length + 1 checksum
-     *  - 0b11xx_xxxx: address info present, payload length in the following byte
-     *      total = 4 header bytes + length + 1 checksum
-     */
-    private fun expectedKwpFrameLength(buf: ByteArray): Int? {
-        if (buf.isEmpty()) return null
-        val fmt = buf[0].toInt() and 0xFF
-        return when (fmt and 0xC0) {
-            0x80 -> 3 + (fmt and 0x3F) + 1
-            0xC0 -> if (buf.size >= 4) 4 + (buf[3].toInt() and 0xFF) + 1 else null
-            else -> null // not a KWP header (e.g. raw TCP burst) — length unknown
-        }
-    }
-
-    /**
-     * Reads from transport while identifying and discarding the echoed request frame.
-     * K-Line adapters often echo the transmitted frame back to the host.
-     *
-     * Rewritten to fix two buffer bugs:
-     *  1. The old "partial echo" path read and DISCARDED a chunk, then read again —
-     *     when the remainder of the echo and the actual response arrived together,
-     *     the response was thrown away and the second read timed out empty.
-     *  2. After stripping the echo it returned whatever bytes were left, even when
-     *     the response frame was still arriving in later chunks (truncated frames).
-     *
-     * Now: accumulate the full echo, strip it, then keep accumulating until the
-     * KWP response frame is complete (per the format-byte length) or the line
-     * goes quiet / the deadline passes.
+     * USB serial reads may split the echo and ECU response arbitrarily. The prior
+     * implementation reset a partial echo and then accidentally accepted its later
+     * bytes as a response. This implementation keeps the byte stream intact, removes
+     * only a complete exact echo, and returns a complete frame addressed back to this
+     * tester. Delayed response-pending (0x7F .. 0x78) frames are not treated as final.
      */
     private suspend fun readDiscardingEcho(request: ByteArray, timeoutMs: Int): ByteArray {
         val deadline = System.currentTimeMillis() + timeoutMs
-        var raw = ByteArray(0)
+        var buffered = ByteArray(0)
+        var echoDecisionPending = true
+        var firstOtherFrame: ByteArray? = null
 
-        // 1) Accumulate until we at least have the full echoed request frame.
-        while (timeLeft(deadline) > 0 && raw.size < request.size) {
-            val chunk = transport.read(timeLeft(deadline).coerceAtMost(FRAME_CHUNK_TIMEOUT_MS).toInt().coerceAtLeast(1))
-            if (chunk.isEmpty()) {
-                if (raw.isEmpty()) return ByteArray(0) // genuine timeout — nothing arrived at all
-                break // partial data only; stop waiting for the rest of the echo
-            }
-            raw += chunk
-        }
-
-        // 2) Strip the echo (bus echo of our request), whatever arrived of it.
-        if (raw.size >= request.size && raw.sliceArray(0 until request.size).contentEquals(request)) {
-            raw = raw.copyOfRange(request.size, raw.size)
-        } else if (raw.isNotEmpty() && raw.size < request.size &&
-            request.sliceArray(0 until raw.size).contentEquals(raw)) {
-            // Only part of the echo arrived; the response hasn't started yet.
-            // Do NOT consume-and-discard further reads here — fall through so
-            // step 3 assembles the response from scratch.
-            raw = ByteArray(0)
-        }
-
-        // 3) Accumulate the actual response until the KWP frame is complete.
-        //    For non-KWP framing (unknown length), a quiet chunk read ends the burst.
-        var response = raw
         while (timeLeft(deadline) > 0) {
-            val expected = expectedKwpFrameLength(response)
-            if (expected != null && response.size >= expected) break // frame complete
-            if (expected == null && response.isNotEmpty() && (response[0].toInt() and 0xC0) != 0x80 && (response[0].toInt() and 0xC0) != 0xC0) {
-                break // not KWP framing and we already have data — don't over-read
+            val chunk = transport.read(
+                timeLeft(deadline).coerceAtMost(FRAME_CHUNK_TIMEOUT_MS).toInt().coerceAtLeast(1),
+            )
+            if (chunk.isEmpty()) {
+                if (!echoDecisionPending && buffered.isNotEmpty()) {
+                    firstOtherFrame = firstOtherFrame ?: firstCompleteFrame(buffered)
+                }
+                break
             }
-            val chunk = transport.read(timeLeft(deadline).coerceAtMost(FRAME_CHUNK_TIMEOUT_MS).toInt().coerceAtLeast(1))
-            if (chunk.isEmpty()) break // quiet line / deadline — return what we have
-            response += chunk
+            buffered += chunk
+
+            if (echoDecisionPending) {
+                when {
+                    buffered.size < request.size && startsWith(request, buffered) -> continue
+                    buffered.size >= request.size && startsWith(buffered, request) -> {
+                        buffered = buffered.copyOfRange(request.size, buffered.size)
+                        echoDecisionPending = false
+                    }
+                    else -> echoDecisionPending = false
+                }
+            }
+
+            if (echoDecisionPending) continue
+
+            val matching = matchingResponseFrame(buffered)
+            if (matching != null) {
+                val parsed = KwpFrameCodec.parse(matching)
+                if (parsed != null && !KwpFrameCodec.isResponsePending(parsed)) return matching
+                firstOtherFrame = firstOtherFrame ?: matching
+            } else {
+                firstOtherFrame = firstOtherFrame ?: firstCompleteFrame(buffered)
+            }
         }
-        return response
+
+        return matchingResponseFrame(buffered) ?: firstOtherFrame ?: firstCompleteFrame(buffered) ?: buffered
     }
+
+    private fun matchingResponseFrame(buffer: ByteArray): ByteArray? {
+        var offset = 0
+        var pendingFrame: ByteArray? = null
+        while (offset < buffer.size) {
+            val located = KwpFrameCodec.findFirstCompleteFrame(buffer, offset) ?: break
+            offset = located.offset + located.frame.bytes.size
+            if (located.frame.targetAddress != testerAddress || located.frame.sourceAddress != target.targetAddress) continue
+            if (!KwpFrameCodec.isResponsePending(located.frame)) return located.frame.bytes
+            pendingFrame = located.frame.bytes
+        }
+        return pendingFrame
+    }
+
+    private fun firstCompleteFrame(buffer: ByteArray): ByteArray? =
+        KwpFrameCodec.findFirstCompleteFrame(buffer)?.frame?.bytes
+
+    private fun startsWith(value: ByteArray, prefix: ByteArray): Boolean =
+        value.size >= prefix.size && prefix.indices.all { value[it] == prefix[it] }
 }
+
+data class ConnectionVerification(
+    val connected: Boolean,
+    val summary: String,
+    val responseHex: String,
+)
 
 data class StepResult(
     val label: String,

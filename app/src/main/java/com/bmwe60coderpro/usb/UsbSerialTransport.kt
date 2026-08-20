@@ -36,6 +36,7 @@ private const val PURGE_MAX_MS = 300L
 class UsbSerialTransport(
     private val application: Application,
     private val permissionManager: UsbPermissionManager,
+    private val baudRate: Int,
 ) : Transport {
 
     private var port: UsbSerialPort? = null
@@ -59,6 +60,8 @@ class UsbSerialTransport(
             DeviceInfo(
                 id = "${device.vendorId}:${device.productId}",
                 name = driver?.device?.productName ?: device.deviceName,
+                vendorId = device.vendorId,
+                productId = device.productId,
             )
         }
     }
@@ -109,10 +112,12 @@ class UsbSerialTransport(
                 
                 try {
                     port?.open(connection)
-                    // Standard K+DCAN speed is 500k for D-CAN or 9600/10400 for K-Line
-                    // But the FTDI chip itself usually talks at 115200 to the host.
-                    // If your cable uses a higher speed (e.g. 230400), you might need to adjust this.
-                    port?.setParameters(115200, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                    // This is the host-to-interface UART speed, not the vehicle CAN bus speed.
+                    // It must honor the user-selected adapter preset; hard-coding 115200 made the
+                    // "safe" FTDI and CH340 profiles ineffective.
+                    require(baudRate in 1_200..1_000_000) { "Unsupported USB serial baud rate: $baudRate" }
+                    port?.setParameters(baudRate, 8, UsbSerialPort.STOPBITS_1, UsbSerialPort.PARITY_NONE)
+                    Log.i(TAG, "Configured USB serial: ${baudRate} baud, 8N1, VID=0x${device.vendorId.toString(16)}, PID=0x${device.productId.toString(16)}")
                     
                     // Critical for K+DCAN stability: 
                     // Set Latency Timer to 1ms for FTDI chips. This prevents the chip from
@@ -125,6 +130,9 @@ class UsbSerialTransport(
                         }
                     }
 
+                    // Most K+DCAN interfaces use the physical pin-7/pin-8 switch for bus
+                    // selection. Preserve the existing asserted control lines for compatibility
+                    // with FTDI-based interfaces, but never infer the cable's physical K-Line / D-CAN mode.
                     port?.dtr = true
                     port?.rts = true
                     

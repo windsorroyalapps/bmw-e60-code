@@ -785,18 +785,34 @@ class MainViewModel(private val application: Application) : ViewModel() {
                 pushConnectionStatus("Reading communication profile...")
                 val profile = newSession.getCommProfile()
                 pushConnectionStatus("Profile: ${profile.name}")
-                pushConnectionStatus("Identifying ECU (${currentTarget().name})...")
-                val vehicleInfo = newSession.tryIdentify()
-                pushConnectionStatus("ECU response: $vehicleInfo")
+                pushConnectionStatus("Verifying ECU communication (${currentTarget().name}) with read-only session and ID requests...")
+                val verification = newSession.verifyCommunication()
+                pushConnectionStatus("ECU response: ${verification.summary}")
+                if (!verification.connected) {
+                    currentTransport.disconnect()
+                    transport = null
+                    session = null
+                    _state.value = _state.value.copy(
+                        connected = false,
+                        rawResponse = verification.responseHex,
+                        vehicleInfo = verification.summary,
+                        dashboardStatus = "ECU did not confirm K+DCAN communication",
+                    )
+                    pushConnectionStatus("ERROR: No valid ECU response. Check ignition, physical K-Line/D-CAN switch, and adapter preset.")
+                    log("ERROR", "K+DCAN verification failed: ${verification.summary}")
+                    return@runBusy
+                }
+
                 session = newSession
                 _state.value = _state.value.copy(
                     connected = true,
-                    vehicleInfo = vehicleInfo,
+                    vehicleInfo = verification.summary,
+                    rawResponse = verification.responseHex,
                     activeCommProfile = profile.name,
                     activeVehicleProfile = E60AddressBook.byKind(_state.value.profile.vehicleProfile).label,
                     dashboardStatus = "Connected, polling stopped",
                 )
-                pushConnectionStatus("SUCCESS: Connected to ${currentTarget().name}")
+                pushConnectionStatus("SUCCESS: Valid K+DCAN response from ${currentTarget().name}")
 
                 // Force ignition ON if requested
                 if (_state.value.forceIgnitionOn) {
@@ -2153,7 +2169,11 @@ class MainViewModel(private val application: Application) : ViewModel() {
 
     private fun buildTransport(profile: ConnectionProfile): Transport {
         return when (profile.transport) {
-            TransportType.USB_KDCAN -> UsbSerialTransport(application, UsbPermissionManager(application))
+            TransportType.USB_KDCAN -> UsbSerialTransport(
+                application = application,
+                permissionManager = UsbPermissionManager(application),
+                baudRate = profile.baudRate,
+            )
             TransportType.ETHERNET_OBD -> TcpObdTransport(profile.tcpHost, profile.tcpPort, profile.connectTimeoutMs, profile.readTimeoutMs)
             TransportType.BLUETOOTH_OBD -> {
                 if (profile.bluetoothMac.isBlank()) {
